@@ -169,7 +169,8 @@ async function doGen(id){
 
 async function doCorr(id){
   const w=D.words.find(w=>String(w.id)===String(id));if(!w||CORR.has(String(id)))return;
-  const text=UT[String(id)]||'';if(!text.trim())return;
+  const text=UT[String(id)]||document.querySelector(`#modal-box textarea`)?.value||'';
+  if(!text.trim()){alert('文章を入力してください');return;}
   if(!getKey()){openSettings();return;}
   CORR.add(String(id));renderModal();
   try{
@@ -487,7 +488,7 @@ function renderModal(){
     </div>
     ${!HMS[id]?`
       <textarea class="ta" oninput="UT['${id}']=this.value" rows="2" placeholder="${esc(w.word)}を使って英文を作ってみましょう…" style="margin-bottom:8px">${sv}</textarea>
-      <button onclick="doCorr('${id}')" ${isC||!sv.trim()?'disabled':''} style="width:100%;padding:11px;border-radius:10px;border:none;background:${isC||!sv.trim()?'#1a2a3a':C.purple};color:${isC||!sv.trim()?C.mu:'#fff'};font-weight:700;cursor:${isC||!sv.trim()?'not-allowed':'pointer'};font-size:13px">
+      <button onclick="doCorr('${id}')" ${isC?'disabled':''} style="width:100%;padding:11px;border-radius:10px;border:none;background:${isC?'#1a2a3a':C.purple};color:${isC?C.mu:'#fff'};font-weight:700;cursor:${isC?'not-allowed':'pointer'};font-size:13px">
         ${isC?'<span class="spin"></span>添削中…':'✓ 添削してもらう'}
       </button>
       ${lc?.feedback?`
