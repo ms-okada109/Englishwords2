@@ -60,7 +60,7 @@ let MID=null; // modal word id
 const GEN=new Set(),CORR=new Set(),SYN=new Set();
 let FS={idx:0,flipped:false,mode:'all',know:0,retry:0};
 let SQ=''; // search query
-const UT={},UN={},SP={},HMS={}; // transient: userText, userNotes, showPast, hideMySent
+const UT={},UN={},SP={},HMS={},SH={}; // transient: userText, userNotes, showPast, hideMySent
 
 // ── DATA ──────────────────────────────────────────────────────
 function load(){try{const r=localStorage.getItem(DB);if(r)D=JSON.parse(r);}catch(e){}}
@@ -504,6 +504,23 @@ function renderModal(){
           </div>
           ${nx?`<button onclick="markDone('${id}','${nx.key}')" style="width:100%;margin-top:10px;padding:12px;border-radius:10px;border:none;background:${C.gold};color:#000;font-weight:700;cursor:pointer;font-size:13px">✓ ${nx.label}完了</button>`:''}
         </div>`:''}
+      ${w.userSentences?.length?`
+        <button onclick="SH['${id}']=!SH['${id}'];renderModal()" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:12px;padding:6px 0;font-family:inherit;margin-top:6px;display:block">
+          ${SH[id]?'▲ 閉じる':'📖 添削履歴 ('+w.userSentences.length+'件)'}
+        </button>
+        ${SH[id]?`<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          ${w.userSentences.map((s,i)=>`
+            <div style="background:#060d18;border:1px solid #1a3050;border-radius:10px;padding:12px 14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <span style="font-size:11px;color:#64748b">${s.ts?new Date(s.ts).toLocaleDateString('ja-JP'):''}${i===0?' ＜最新＞':''}</span>
+                <span style="font-size:11px;padding:2px 8px;border-radius:99px;background:${s.passed?'#064e3b':'#450a0a'};color:${s.passed?'#10b981':'#ef4444'};font-weight:600">${s.passed?'✅ 合格':'❌ 要復習'}</span>
+              </div>
+              <div style="font-size:13px;color:#64748b;font-style:italic;margin-bottom:6px">"${esc(s.text)}"</div>
+              ${s.corrected&&s.corrected!==s.text?`<div style="font-size:13px;color:#10b981;margin-bottom:6px">→ "${esc(s.corrected)}"</div>`:''}
+              <div style="font-size:12px;color:#94a3b8;line-height:1.6">${esc(s.feedback)}</div>
+            </div>`).join('')}
+        </div>`:''}
+      `:''}
     `:''}
 
     <div class="divider"></div>
