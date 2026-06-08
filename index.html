@@ -94,7 +94,7 @@ const GEN=new Set(),CORR=new Set(),SYN=new Set();
 let FS={idx:0,flipped:false,mode:'all',know:0,retry:0};
 let SQ='';
 const UT={},UN={},SP={},HMS={},SH={};
-let DTAB='s1', DT={}, DX={}, dtTimer=null;
+let DTAB='s1', DT={}, DX={}, dtTimer=null, gistSyncing=false;
 
 // ── DATA ──────────────────────────────────────────────────────
 function load(){
@@ -298,8 +298,9 @@ function render(){
     <div style="background:${C.card};border-bottom:1px solid ${C.b};position:sticky;top:0;z-index:10">
       <div style="padding:16px 16px 0;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div><div style="font-size:20px;font-weight:900;letter-spacing:-.5px">📚 単語帳</div><div style="font-size:11px;color:${C.mu}">${D.words.length}語 登録済み</div></div>
-        <div style="display:flex;gap:2px">
-          ${[['📤','エクスポート','exportData()'],['📥','インポート','openImport()'],['⚙️','設定','openSettings()']].map(([ic,tt,fn])=>`<button onclick="${fn}" title="${tt}" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:17px;padding:4px 7px">${ic}</button>`).join('')}
+        <div style="display:flex;gap:0;align-items:center">
+          <div id="cloud-btns" style="display:flex;gap:0">${cloudBtnsHTML()}</div>
+          ${[['📤','エクスポート','exportData()'],['📥','インポート','openImport()'],['⚙️','設定','openSettings()']].map(([ic,tt,fn])=>`<button onclick="${fn}" title="${tt}" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:17px;padding:4px 5px">${ic}</button>`).join('')}
         </div>
       </div>
       <div style="display:flex;padding:0 4px">
@@ -671,6 +672,15 @@ function openSettings(){
     <input id="key-inp" type="password" value="${esc(getKey())}" placeholder="sk-ant-..." class="inp" style="margin-bottom:8px">
     <button onclick="saveKey()" class="btn btn-full">保存</button>
     <div class="divider"></div>
+    <div class="sl">☁️ クラウド同期（GitHub Gist）</div>
+    <p style="font-size:12px;color:${C.mu};margin-bottom:10px;line-height:1.7">
+      <a href="https://github.com/settings/tokens/new" target="_blank" style="color:${C.blue}">github.com/settings/tokens</a> でトークンを作成してください。<br>
+      スコープは <code style="background:#0a1525;padding:1px 6px;border-radius:4px;font-size:11px">gist</code> のみ選択すればOKです。
+    </p>
+    <input id="gh-token-inp" type="password" value="${esc(D.settings.githubToken||'')}" placeholder="ghp_xxxxxxxxxxxx" class="inp" style="margin-bottom:8px">
+    ${D.settings.gistId?`<p style="font-size:11px;color:${C.mu};margin-bottom:8px">✓ Gist ID: ${esc(D.settings.gistId.slice(0,12))}…</p>`:''}
+    <button onclick="saveGithubToken()" class="btn btn-full" style="background:#238636">保存</button>
+    <div class="divider"></div>
     <div class="sl">データ管理</div>
     <button onclick="exportData()" class="btn btn-s btn-full" style="margin-top:8px">📤 単語帳をJSONエクスポート</button>
   `;
@@ -690,6 +700,76 @@ function openImport(){
   document.getElementById('float-wrap').classList.add('on');
 }
 function closeFloat(){document.getElementById('float-wrap').classList.remove('on');}
+
+// ── GIST SYNC ─────────────────────────────────────────────────
+function cloudBtnsHTML(){
+  const ok=!!D.settings.githubToken;
+  return`
+    <button onclick="loadFromGist()" title="クラウドから読み込み" style="background:none;border:none;color:${ok?C.blue:C.mu};cursor:pointer;font-size:16px;padding:4px 5px">☁️↓</button>
+    <button onclick="saveToGist()" title="クラウドに保存" style="background:none;border:none;color:${ok?C.blue:C.mu};cursor:pointer;font-size:16px;padding:4px 5px">☁️↑</button>`;
+}
+
+function saveGithubToken(){
+  D.settings.githubToken=document.getElementById('gh-token-inp')?.value.trim()||'';
+  persist();closeFloat();render();
+}
+
+async function saveToGist(){
+  if(gistSyncing)return;
+  const token=D.settings.githubToken;
+  if(!token){alert('GitHubトークンを設定してください');openSettings();return;}
+  gistSyncing=true;
+  const el=document.getElementById('cloud-btns');
+  if(el)el.innerHTML=`<span style="font-size:11px;color:${C.mu};padding:0 6px">保存中…</span>`;
+  try{
+    const content=JSON.stringify({words:D.words,dictation:{lines:DT,extra:DX}},null,2);
+    const body={description:'単語帳データ (vocab-app)',public:false,files:{'vocab_app_data.json':{content}}};
+    const gistId=D.settings.gistId;
+    const r=await fetch(gistId?`https://api.github.com/gists/${gistId}`:'https://api.github.com/gists',{
+      method:gistId?'PATCH':'POST',
+      headers:{'Authorization':`token ${token}`,'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    if(!gistId){D.settings.gistId=d.id;persist();}
+    alert('☁️ 保存しました（'+D.words.length+'語）');
+  }catch(e){alert('保存失敗: '+e.message);}
+  gistSyncing=false;
+  const el2=document.getElementById('cloud-btns');
+  if(el2)el2.innerHTML=cloudBtnsHTML();
+}
+
+async function loadFromGist(){
+  if(gistSyncing)return;
+  const token=D.settings.githubToken;
+  const gistId=D.settings.gistId;
+  if(!token){alert('GitHubトークンを設定してください');openSettings();return;}
+  if(!gistId){alert('まだクラウドにデータがありません。先に☁️↑で保存してください');return;}
+  if(!confirm('クラウドのデータで上書きしますか？\n現在のデータは失われます。'))return;
+  gistSyncing=true;
+  const el=document.getElementById('cloud-btns');
+  if(el)el.innerHTML=`<span style="font-size:11px;color:${C.mu};padding:0 6px">読込中…</span>`;
+  try{
+    const r=await fetch(`https://api.github.com/gists/${gistId}`,{
+      headers:{'Authorization':`token ${token}`}
+    });
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    const content=d.files['vocab_app_data.json']?.content;
+    if(!content)throw new Error('データが見つかりません');
+    const parsed=JSON.parse(content);
+    D.words=parsed.words||[];
+    DT=parsed.dictation?.lines||{};
+    DX=parsed.dictation?.extra||{};
+    persist();saveDT();
+    alert('☁️ 読み込み完了（'+D.words.length+'語）');
+    render();
+  }catch(e){alert('読み込み失敗: '+e.message);}
+  gistSyncing=false;
+  const el2=document.getElementById('cloud-btns');
+  if(el2)el2.innerHTML=cloudBtnsHTML();
+}
 
 // ── INIT ──────────────────────────────────────────────────────
 document.getElementById('modal-wrap').addEventListener('click',e=>{if(e.target.id==='modal-wrap')closeModal();});
