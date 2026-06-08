@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>📚 単語帳</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080f1a;--card:#0d1b2e;--c2:#0a1525;--b:#1a3050;
+  --blue:#3b82f6;--gold:#f59e0b;--green:#10b981;--red:#ef4444;
+  --purple:#8b5cf6;--mu:#64748b
+}
+body{background:var(--bg);color:#e2e8f0;font-family:'Inter',system-ui,sans-serif;min-height:100vh;max-width:600px;margin:0 auto;padding-bottom:32px}
+input,textarea,button{font-family:inherit}
+.inp{width:100%;background:var(--c2);border:1px solid var(--b);border-radius:10px;color:#e2e8f0;font-size:14px;padding:10px 12px;outline:none;transition:border-color .15s}
+.inp:focus{border-color:var(--blue)}
+.ta{width:100%;background:var(--c2);border:1px solid var(--b);border-radius:10px;color:#e2e8f0;font-size:14px;padding:10px 12px;outline:none;resize:none;line-height:1.6;transition:border-color .15s}
+.ta:focus{border-color:var(--blue)}
+.btn{padding:10px 18px;border-radius:10px;border:none;background:var(--blue);color:#fff;font-weight:700;font-size:13px;cursor:pointer;transition:all .15s}
+.btn:disabled{background:#1a2a3a;color:var(--mu);cursor:not-allowed}
+.btn-s{background:transparent;border:1px solid var(--b);color:var(--mu)}
+.btn-s:hover{border-color:#94a3b8;color:#94a3b8}
+.btn-full{width:100%;padding:12px}
+.card{background:var(--card);border:1px solid var(--b);border-radius:14px;padding:16px;margin-bottom:12px}
+.sl{font-size:11px;color:var(--mu);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
+.divider{border-top:1px solid var(--b);margin:16px 0}
+.tag{font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;display:none;align-items:flex-end;justify-content:center}
+.overlay.on{display:flex}
+.modal{background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:92vh;overflow-y:auto;padding:20px 16px 40px}
+.handle{width:40px;height:4px;background:var(--b);border-radius:99px;margin:0 auto 14px}
+.float-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+.float-overlay.on{display:flex}
+.float-box{background:var(--card);border-radius:16px;padding:22px;width:100%;max-width:440px}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--b);border-top-color:var(--blue);border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:4px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="overlay" id="modal-wrap">
+  <div class="modal" id="modal-box"></div>
+</div>
+<div class="float-overlay" id="float-wrap">
+  <div class="float-box" id="float-box"></div>
+</div>
+
+<script>
+// ── CONSTANTS ─────────────────────────────────────────────────
+const DB='vocabapp_v3';
+const SCHED=[{key:'day1',label:'1日後',days:1},{key:'day3',label:'3日後',days:3},{key:'week1',label:'1週間後',days:7}];
+const CTXS=['in a professional business context','in everyday casual conversation','in a literary or narrative style','in an academic setting','describing character or behavior','in a news article'];
+const C={bg:'#080f1a',card:'#0d1b2e',c2:'#0a1525',b:'#1a3050',blue:'#3b82f6',gold:'#f59e0b',green:'#10b981',red:'#ef4444',purple:'#8b5cf6',mu:'#64748b'};
+
+// ── STATE ─────────────────────────────────────────────────────
+let D={words:[],settings:{apiKey:''}};
+let TAB='today';
+let MID=null; // modal word id
+const GEN=new Set(),CORR=new Set(),SYN=new Set();
+let FS={idx:0,flipped:false,mode:'all',know:0,retry:0};
+let SQ=''; // search query
+const UT={},UN={},SP={},HMS={}; // transient: userText, userNotes, showPast, hideMySent
+
+// ── DATA ──────────────────────────────────────────────────────
+function load(){try{const r=localStorage.getItem(DB);if(r)D=JSON.parse(r);}catch(e){}}
+function persist(){try{localStorage.setItem(DB,JSON.stringify(D));}catch(e){}}
+function getKey(){return D.settings.apiKey||'';}
+
+function importWords(str){
+  try{
+    const arr=JSON.parse(str);
+    if(!Array.isArray(arr))return'形式が正しくありません';
+    const ex=new Set(D.words.map(w=>String(w.id)));
+    const ns=arr.filter(x=>x.word&&!ex.has(String(x.id))).map(x=>({
+      id:x.id||Date.now()+Math.random(),word:x.word,meaning:x.meaning||'',
+      addedAt:x.addedAt||x.id||Date.now(),dateStr:x.dateStr||ts2d(x.id||Date.now()),
+      examples:x.examples||[],userSentences:x.userSentences||[],
+      reviews:x.reviews||{day1:null,day3:null,week1:null},notes:x.notes||'',
+    }));
+    D.words=[...ns,...D.words];persist();
+    return`${ns.length}語を取り込みました`;
+  }catch(e){return'エラー: '+e.message;}
+}
+
+// ── UTILS ─────────────────────────────────────────────────────
+const z=n=>String(n).padStart(2,'0');
+function ts2d(ts){const d=new Date(ts);return`${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;}
+function today(){return ts2d(Date.now());}
+function fmtDate(s){
+  const t=today(),y=ts2d(Date.now()-864e5);
+  if(s===t)return'今日';if(s===y)return'昨日';
+  const[yr,m,d]=s.split('-');return`${yr}年${+m}月${+d}日`;
+}
+function revSt(w){
+  const at=w.addedAt||+w.id,el=Date.now()-at;
+  return SCHED.map(s=>({...s,due:el>=s.days*864e5,done:!!(w.reviews?.[s.key])}));
+}
+function isDue(w){return revSt(w).some(s=>s.due&&!s.done);}
+function isDone(w){return revSt(w).every(s=>s.done);}
+function streak(){
+  const dates=new Set(D.words.map(w=>w.dateStr));
+  let n=0;const d=new Date();
+  while(true){const k=ts2d(d.getTime());if(dates.has(k)){n++;d.setDate(d.getDate()-1);}else if(k===today()){d.setDate(d.getDate()-1);}else break;}
+  return n;
+}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function sd(el){return esc(el?.dataset?.t||'');}
+
+// ── TTS ───────────────────────────────────────────────────────
+function speak(btn){
+  if(!window.speechSynthesis)return;
+  const text=typeof btn==='string'?btn:(btn.dataset.t||'');
+  window.speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);u.lang='en-US';
+  const vs=window.speechSynthesis.getVoices();
+  const v=vs.find(v=>v.lang==='en-US'&&/google|samantha|alex/i.test(v.name))||vs.find(v=>v.lang==='en-US')||vs.find(v=>v.lang.startsWith('en'));
+  if(v)u.voice=v;window.speechSynthesis.speak(u);
+}
+
+// ── API ───────────────────────────────────────────────────────
+async function callAPI(sys,user,max=500){
+  const k=getKey();if(!k)throw new Error('NO_KEY');
+  const r=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:max,system:sys,messages:[{role:'user',content:user}]})
+  });
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||'HTTP '+r.status);}
+  return(await r.json()).content[0].text;
+}
+const pj=t=>JSON.parse(t.replace(/```json|```/g,'').trim());
+
+async function apiEx(word,meaning){
+  const ctx=CTXS[Math.floor(Math.random()*CTXS.length)];
+  return pj(await callAPI('You are an English vocabulary teacher for Japanese learners. Return ONLY valid JSON, no markdown.',
+    `Create a vivid example sentence for "${word}". ${meaning?`Meaning: ${meaning}.`:''} Use it ${ctx}. JSON:\n{"sentence":"<example>","translation":"<日本語訳>","point":"<使い方のポイント一言>"}`));
+}
+async function apiCorr(word,meaning,sent){
+  return pj(await callAPI('You are an English writing coach for Japanese learners. Return ONLY valid JSON, no markdown.',
+    `Word:"${word}"(${meaning||'?'}). Student:"${sent}". Evaluate. JSON:\n{"corrected":"<corrected or same>","feedback":"<日本語フィードバック>","passed":<true/false>}`));
+}
+async function apiSyn(word,meaning){
+  return pj(await callAPI('You are an English vocabulary teacher. Return ONLY valid JSON, no markdown.',
+    `For "${word}"(${meaning||''}), list synonyms and antonyms with Japanese. JSON:\n{"synonyms":[{"word":"","jp":""}],"antonyms":[{"word":"","jp":""}]}`));
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────
+function addWord(){
+  const wi=document.getElementById('wi'),mi=document.getElementById('mi');
+  const word=wi?.value.trim();if(!word)return;
+  const e={id:Date.now(),word,meaning:mi?.value.trim()||'',addedAt:Date.now(),dateStr:today(),examples:[],userSentences:[],reviews:{day1:null,day3:null,week1:null},notes:''};
+  D.words.unshift(e);persist();if(wi)wi.value='';if(mi)mi.value='';
+  render();doGen(e.id);
+}
+
+async function doGen(id){
+  const w=D.words.find(w=>String(w.id)===String(id));if(!w||GEN.has(String(id)))return;
+  if(!getKey()){openSettings();return;}
+  GEN.add(String(id));
+  if(String(MID)===String(id))renderModal();
+  try{
+    const r=await apiEx(w.word,w.meaning);
+    const ww=D.words.find(w=>String(w.id)===String(id));
+    if(ww){ww.examples=[{...r,ts:Date.now()},...ww.examples].slice(0,20);persist();}
+  }catch(e){if(e.message==='NO_KEY')openSettings();}
+  GEN.delete(String(id));render();if(String(MID)===String(id))renderModal();
+}
+
+async function doCorr(id){
+  const w=D.words.find(w=>String(w.id)===String(id));if(!w||CORR.has(String(id)))return;
+  const text=UT[String(id)]||'';if(!text.trim())return;
+  if(!getKey()){openSettings();return;}
+  CORR.add(String(id));renderModal();
+  try{
+    const r=await apiCorr(w.word,w.meaning,text);
+    const ww=D.words.find(w=>String(w.id)===String(id));
+    if(ww){ww.userSentences=[{text,...r,ts:Date.now()},...(ww.userSentences||[])].slice(0,10);persist();}
+  }catch(e){console.error(e);}
+  CORR.delete(String(id));render();if(String(MID)===String(id))renderModal();
+}
+
+async function doSyn(id){
+  const w=D.words.find(w=>String(w.id)===String(id));if(!w||SYN.has(String(id)))return;
+  if(!getKey()){openSettings();return;}
+  SYN.add(String(id));renderModal();
+  try{
+    const r=await apiSyn(w.word,w.meaning);
+    const ww=D.words.find(w=>String(w.id)===String(id));
+    if(ww){ww.synonyms=r;persist();}
+  }catch(e){console.error(e);}
+  SYN.delete(String(id));if(String(MID)===String(id))renderModal();
+}
+
+function markDone(id,key){
+  const w=D.words.find(w=>String(w.id)===String(id));if(!w)return;
+  w.reviews[key]={ts:Date.now()};persist();
+  render();if(String(MID)===String(id))renderModal();
+}
+function saveNotes(id){
+  const w=D.words.find(w=>String(w.id)===String(id));if(!w)return;
+  w.notes=UN[String(id)]||'';persist();
+  const el=document.getElementById('notes-saved');if(el){el.style.opacity=1;setTimeout(()=>el.style.opacity=0,1500);}
+}
+function delWord(id){
+  if(!confirm('この単語を削除しますか？'))return;
+  D.words=D.words.filter(w=>String(w.id)!==String(id));persist();
+  closeModal();render();
+}
+function exportData(){
+  const b=new Blob([JSON.stringify(D.words,null,2)],{type:'application/json'});
+  const u=URL.createObjectURL(b),a=document.createElement('a');
+  a.href=u;a.download=`vocab_${today()}.json`;a.click();URL.revokeObjectURL(u);
+}
+function doImport(){
+  const txt=document.getElementById('imp-txt')?.value.trim();if(!txt)return;
+  const msg=importWords(txt);
+  const el=document.getElementById('imp-res');
+  if(el)el.innerHTML=`<div style="padding:10px;border-radius:8px;font-size:13px;margin-top:8px;background:${msg.includes('語を取り込み')?'#064e3b':'#450a0a'};color:${msg.includes('語を取り込み')?C.green:C.red}">${esc(msg)}</div>`;
+  if(msg.includes('語を取り込み'))setTimeout(()=>{closeFloat();render();},1200);
+}
+function saveKey(){D.settings.apiKey=document.getElementById('key-inp')?.value.trim()||'';persist();closeFloat();}
+
+// Flashcard
+function setFM(m){FS={idx:0,flipped:false,mode:m,know:0,retry:0};const el=document.getElementById('fc');if(el)el.innerHTML=buildFC();}
+function flipCard(){FS.flipped=!FS.flipped;const el=document.getElementById('fc');if(el)el.innerHTML=buildFC();}
+function cardKnow(){FS.know++;FS.flipped=false;FS.idx++;const el=document.getElementById('fc');if(el)el.innerHTML=buildFC();}
+function cardRetry(){FS.retry++;FS.flipped=false;FS.idx++;const el=document.getElementById('fc');if(el)el.innerHTML=buildFC();}
+
+// ── RENDER ────────────────────────────────────────────────────
+function setTab(t){TAB=t;FS={idx:0,flipped:false,mode:FS.mode,know:0,retry:0};render();}
+
+function render(){
+  const due=D.words.filter(isDue).length;
+  document.getElementById('app').innerHTML=`
+    <div style="background:${C.card};border-bottom:1px solid ${C.b};position:sticky;top:0;z-index:10">
+      <div style="padding:16px 16px 0;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div><div style="font-size:20px;font-weight:900;letter-spacing:-.5px">📚 単語帳</div><div style="font-size:11px;color:${C.mu}">${D.words.length}語 登録済み</div></div>
+        <div style="display:flex;gap:2px">
+          ${[['📤','エクスポート','exportData()'],['📥','インポート','openImport()'],['⚙️','設定','openSettings()']].map(([ic,tt,fn])=>`<button onclick="${fn}" title="${tt}" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:17px;padding:4px 7px">${ic}</button>`).join('')}
+        </div>
+      </div>
+      <div style="display:flex;padding:0 6px">
+        ${[['today','今日'],['book','単語帳'],['flash','🃏'],['tests','テスト'],['stats','統計']].map(([id,lbl])=>{
+          const on=TAB===id;
+          const badge=id==='tests'&&due>0?`<span style="position:absolute;top:4px;right:calc(50% - 18px);background:${C.red};color:#fff;font-size:9px;font-weight:700;border-radius:99px;padding:1px 4px">${due}</span>`:'';
+          return`<button onclick="setTab('${id}')" style="flex:1;padding:9px 0;background:none;border:none;cursor:pointer;font-size:12px;font-weight:${on?700:400};color:${on?'#f1f5f9':C.mu};border-bottom:3px solid ${on?C.gold:'transparent'};position:relative;transition:all .15s">${lbl}${badge}</button>`;
+        }).join('')}
+      </div>
+    </div>
+    <div style="padding:16px 16px 48px">
+      ${TAB==='today'?bToday():TAB==='book'?bBook():TAB==='flash'?bFlash():TAB==='tests'?bTests():bStats()}
+    </div>
+  `;
+}
+
+// ── TODAY ─────────────────────────────────────────────────────
+function bToday(){
+  const tw=D.words.filter(w=>w.dateStr===today()),due=D.words.filter(isDue).length,st=streak();
+  return`
+    ${due>0?`<div onclick="setTab('tests')" style="background:#1a0808;border:1px solid #450a0a;border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;cursor:pointer"><div style="font-size:22px;font-weight:900;color:${C.red}">${due}</div><div style="flex:1;font-size:14px;color:#fca5a5">テスト待ちの単語があります →</div></div>`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:18px">
+      ${[[tw.length,'今日の追加',C.gold,''],[D.words.length,'累計',C.blue,''],[st,'継続日数',C.green,'日']].map(([v,l,c,u])=>`
+        <div style="background:${C.card};border:1px solid ${C.b};border-radius:12px;padding:12px 8px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:${c}">${v}<span style="font-size:11px">${u}</span></div>
+          <div style="font-size:10px;color:${C.mu};margin-top:2px">${l}</div>
+        </div>`).join('')}
+    </div>
+    <div class="card">
+      <div class="sl">単語を追加</div>
+      <input id="wi" class="inp" placeholder="英単語　例: eloquent, tenacious..." style="margin-bottom:8px" onkeydown="if(event.key==='Enter')document.getElementById('mi').focus()">
+      <div style="display:flex;gap:8px">
+        <input id="mi" class="inp" placeholder="意味・メモ（任意）" style="flex:1" onkeydown="if(event.key==='Enter')addWord()">
+        <button onclick="addWord()" class="btn" style="white-space:nowrap">＋ 追加</button>
+      </div>
+    </div>
+    ${tw.length===0?`<div style="text-align:center;color:${C.mu};padding:32px 0;font-size:14px">今日はまだ単語が追加されていません</div>`
+      :`<div class="sl" style="margin-top:4px">今日追加した単語 (${tw.length})</div>${tw.map(bWI).join('')}`}
+  `;
+}
+
+// ── BOOK ──────────────────────────────────────────────────────
+function bBook(){
+  return`
+    <input id="srch" class="inp" value="${esc(SQ)}" placeholder="🔍 単語・意味を検索…" style="margin-bottom:14px"
+      oninput="SQ=this.value;document.getElementById('blist').innerHTML=bBookList()">
+    <div id="blist">${bBookList()}</div>
+  `;
+}
+function bBookList(){
+  const list=SQ.trim()?D.words.filter(w=>w.word.toLowerCase().includes(SQ.toLowerCase())||w.meaning.includes(SQ)):D.words;
+  if(!D.words.length)return`<div style="text-align:center;color:${C.mu};padding:40px 0;font-size:14px">単語がまだありません</div>`;
+  if(!list.length)return`<div style="text-align:center;color:${C.mu};padding:32px 0;font-size:14px">「${esc(SQ)}」に一致する単語がありません</div>`;
+  const g={};for(const w of list){const d=w.dateStr||today();(g[d]=g[d]||[]).push(w);}
+  return Object.keys(g).sort((a,b)=>b.localeCompare(a)).map(d=>`
+    <div style="display:flex;justify-content:space-between;margin:16px 0 8px">
+      <div style="font-size:13px;font-weight:700">${fmtDate(d)}</div>
+      <div style="font-size:12px;color:${C.mu}">${g[d].length}語</div>
+    </div>${g[d].map(bWI).join('')}`).join('');
+}
+
+function bWI(w){
+  const due=isDue(w),done=isDone(w);
+  return`<div onclick="openModal('${w.id}')" style="display:flex;align-items:center;gap:10px;padding:11px 14px;background:${C.c2};border:1px solid ${C.b};border-radius:10px;margin-bottom:6px;cursor:pointer">
+    <div style="flex:1"><div style="font-size:16px;font-weight:700;color:${C.gold}">${esc(w.word)}</div>${w.meaning?`<div style="font-size:12px;color:${C.mu}">${esc(w.meaning)}</div>`:''}</div>
+    <div style="display:flex;gap:4px;flex-shrink:0">
+      ${w.examples.length?`<span class="tag" style="background:#0d1b2e;color:${C.blue}">例${w.examples.length}</span>`:''}
+      ${due?`<span class="tag" style="background:#450a0a;color:${C.red}">テスト!</span>`:''}
+      ${done?`<span class="tag" style="background:#064e3b;color:${C.green}">完了</span>`:''}
+    </div>
+  </div>`;
+}
+
+// ── FLASHCARD ─────────────────────────────────────────────────
+function bFlash(){
+  return`
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      ${[['all','全単語'],['due','テスト待ちのみ']].map(([id,lbl])=>`
+        <button onclick="setFM('${id}')" style="flex:1;padding:9px 0;border-radius:10px;border:none;cursor:pointer;background:${FS.mode===id?C.blue:C.card};color:${FS.mode===id?'#fff':C.mu};font-size:13px;font-weight:${FS.mode===id?700:400}">${lbl}</button>`).join('')}
+    </div>
+    <div id="fc">${buildFC()}</div>
+  `;
+}
+function buildFC(){
+  const pool=(FS.mode==='due'?D.words.filter(isDue):D.words).filter(w=>w.examples.length>0||w.meaning);
+  if(!pool.length)return`<div style="text-align:center;color:${C.mu};padding:48px 0;font-size:14px;line-height:2">${FS.mode==='due'?'テスト待ちの単語がありません':'まず単語を追加してください'}</div>`;
+  const card=pool[FS.idx%pool.length];
+  const tot=FS.know+FS.retry;
+  return`
+    ${tot>0?`<div style="display:flex;gap:10px;margin-bottom:14px">
+      <div style="flex:1;background:#064e3b;border-radius:10px;padding:8px 12px;text-align:center"><div style="font-size:20px;font-weight:700;color:${C.green}">${FS.know}</div><div style="font-size:11px;color:#6ee7b7">知ってた</div></div>
+      <div style="flex:1;background:#450a0a;border-radius:10px;padding:8px 12px;text-align:center"><div style="font-size:20px;font-weight:700;color:${C.red}">${FS.retry}</div><div style="font-size:11px;color:#fca5a5">要復習</div></div>
+    </div>`:''}
+    <div onclick="flipCard()" style="background:${C.card};border:1px solid ${FS.flipped?C.blue:C.b};border-radius:20px;padding:32px;text-align:center;cursor:pointer;min-height:220px;display:flex;flex-direction:column;justify-content:center;align-items:center;margin-bottom:16px;transition:border-color .2s">
+      ${!FS.flipped?`
+        <div style="font-size:32px;font-weight:900;color:${C.gold};margin-bottom:6px">${esc(card.word)}</div>
+        <button onclick="event.stopPropagation();speak(this)" data-t="${esc(card.word)}" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:22px">🔊</button>
+        <div style="font-size:12px;color:${C.mu};margin-top:10px">タップして確認</div>
+      `:`
+        ${card.meaning?`<div style="font-size:20px;font-weight:700;color:${C.gold};margin-bottom:10px">${esc(card.meaning)}</div>`:''}
+        ${card.examples[0]?`<div style="font-size:13px;color:#94a3b8;line-height:1.7;font-style:italic;max-width:320px">"${esc(card.examples[0].sentence)}"</div>`:''}
+      `}
+    </div>
+    ${FS.flipped?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <button onclick="cardRetry()" style="padding:14px;border-radius:12px;border:none;background:#450a0a;color:${C.red};font-weight:700;cursor:pointer;font-size:15px">❌ もう一度</button>
+      <button onclick="cardKnow()" style="padding:14px;border-radius:12px;border:none;background:#064e3b;color:${C.green};font-weight:700;cursor:pointer;font-size:15px">✅ 覚えた</button>
+    </div>`:''}
+    <div style="text-align:center;font-size:12px;color:${C.mu};margin-top:14px">${(FS.idx%pool.length)+1} / ${pool.length}枚</div>
+  `;
+}
+
+// ── TESTS ─────────────────────────────────────────────────────
+function bTests(){
+  const due=D.words.filter(isDue);
+  if(!due.length)return`<div style="text-align:center;color:${C.mu};padding:48px 0;font-size:14px;line-height:2">🎉 テスト待ちの単語はありません</div>`;
+  return`
+    <div class="sl">テスト待ち (${due.length}語)</div>
+    <p style="font-size:13px;color:${C.mu};margin-bottom:14px;line-height:1.6">単語をタップして英文を作り、添削を受けましょう。</p>
+    ${due.map(w=>{const nx=revSt(w).find(s=>s.due&&!s.done);return`
+      <div onclick="openModal('${w.id}')" style="background:${C.c2};border:1px solid ${C.b};border-radius:12px;padding:13px 16px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;gap:10px">
+        <div style="flex:1"><div style="font-size:18px;font-weight:800;color:${C.gold}">${esc(w.word)}</div>${w.meaning?`<div style="font-size:12px;color:${C.mu}">${esc(w.meaning)}</div>`:''}</div>
+        <span class="tag" style="background:#450a0a;color:${C.red}">${nx?.label}</span>
+      </div>`;}).join('')}
+  `;
+}
+
+// ── STATS ─────────────────────────────────────────────────────
+function bStats(){
+  const mas=D.words.filter(isDone).length,wex=D.words.filter(w=>w.examples.length>0).length;
+  const pass=D.words.flatMap(w=>w.userSentences||[]).filter(s=>s.passed).length,st=streak();
+  const days=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const k=ts2d(d.getTime());return{l:`${d.getMonth()+1}/${d.getDate()}`,c:D.words.filter(w=>w.dateStr===k).length};});
+  const mx=Math.max(...days.map(d=>d.c),1);
+  return`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+      ${[[D.words.length,'総単語数','#f1f5f9',''],[st,'継続日数',C.gold,'日'],[mas,'マスター済み',C.green,''],[pass,'添削合格',C.blue,'']].map(([v,l,c,u])=>`
+        <div style="background:${C.card};border:1px solid ${C.b};border-radius:12px;padding:14px 12px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:${c}">${v}<span style="font-size:13px">${u}</span></div>
+          <div style="font-size:11px;color:${C.mu};margin-top:4px">${l}</div>
+        </div>`).join('')}
+    </div>
+    <div style="background:${C.card};border:1px solid ${C.b};border-radius:14px;padding:18px;margin-bottom:16px">
+      <div class="sl">過去7日間の追加数</div>
+      <div style="display:flex;align-items:flex-end;gap:6px;height:80px">
+        ${days.map(({l,c})=>`
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+            ${c>0?`<div style="font-size:10px;color:#94a3b8">${c}</div>`:''}
+            <div style="width:100%;height:70px;display:flex;align-items:flex-end">
+              <div style="width:100%;height:${Math.max(Math.round((c/mx)*65),c>0?4:2)}px;background:${c>0?C.blue:'#1a2a3a'};border-radius:3px 3px 0 0"></div>
+            </div>
+            <div style="font-size:10px;color:${C.mu}">${l}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+    ${D.words.length?`
+    <div style="background:${C.card};border:1px solid ${C.b};border-radius:14px;padding:18px">
+      <div class="sl">学習進捗</div>
+      ${[[wex,D.words.length,'例文あり',C.blue],[mas,D.words.length,'マスター済み',C.green]].map(([v,tot,l,c])=>`
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+            <span style="color:#94a3b8">${l}</span><span style="color:${c};font-weight:700">${v}/${tot}</span>
+          </div>
+          <div style="background:#1a2a3a;border-radius:99px;height:8px">
+            <div style="background:${c};border-radius:99px;height:100%;width:${tot>0?(v/tot)*100:0}%;transition:width .4s"></div>
+          </div>
+        </div>`).join('')}
+    </div>`:''}
+  `;
+}
+
+// ── MODAL ─────────────────────────────────────────────────────
+function openModal(id){
+  MID=id;const sid=String(id);
+  const w=D.words.find(w=>String(w.id)===sid);
+  if(!w)return;
+  if(UT[sid]===undefined)UT[sid]=w.userSentences?.[0]?.text||'';
+  if(UN[sid]===undefined)UN[sid]=w.notes||'';
+  if(HMS[sid]===undefined)HMS[sid]=false;
+  if(SP[sid]===undefined)SP[sid]=false;
+  document.getElementById('modal-wrap').classList.add('on');
+  renderModal();
+}
+function closeModal(){MID=null;document.getElementById('modal-wrap').classList.remove('on');}
+
+function renderModal(){
+  const w=D.words.find(w=>String(w.id)===String(MID));if(!w)return;
+  const id=String(w.id);
+  const st=revSt(w),nx=st.find(s=>s.due&&!s.done);
+  const lat=w.examples[0],past=w.examples.slice(1),lc=w.userSentences?.[0];
+  const isG=GEN.has(id),isC=CORR.has(id),isS=SYN.has(id);
+  const sv=esc(UT[id]||'');
+
+  document.getElementById('modal-box').innerHTML=`
+    <div class="handle"></div>
+    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:28px;font-weight:900;color:${C.gold};letter-spacing:-.5px">${esc(w.word)}</div>
+          <button onclick="speak(this)" data-t="${esc(w.word)}" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:20px">🔊</button>
+        </div>
+        <div style="font-size:13px;color:#94a3b8;margin-top:2px">${esc(w.meaning)||'意味未登録'} · ${fmtDate(w.dateStr||today())}</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      ${st.map(s=>`<div style="flex:1;text-align:center;padding:8px 4px;border-radius:8px;background:${s.done?'#064e3b':s.due?'#450a0a':C.c2};border:1px solid ${s.done?C.green:s.due?C.red:C.b}">
+        <div style="font-size:11px;font-weight:700;color:${s.done?C.green:s.due?C.red:C.mu}">${s.label.replace('後テスト','後')}</div>
+        <div style="font-size:16px">${s.done?'✓':s.due?'!':'○'}</div>
+      </div>`).join('')}
+    </div>
+    ${nx?`<div style="background:#1a0808;border:1px solid #450a0a;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#fca5a5">📋 ${nx.label}が来ています</div>`:''}
+
+    <div class="sl">AI例文</div>
+    <button onclick="doGen('${id}')" ${isG?'disabled':''} style="width:100%;padding:11px;border-radius:10px;border:${lat?`1px solid #1e3a5f`:'none'};background:${isG?'#1a2a3a':lat?'#1a3050':C.blue};color:${isG?C.mu:lat?'#60a5fa':'#fff'};font-weight:700;cursor:${isG?'not-allowed':'pointer'};font-size:13px;margin-bottom:8px">
+      ${isG?'<span class="spin"></span>生成中…':lat?'↺ 別の例文を生成':'▶ 例文を生成'}
+    </button>
+    ${lat?`
+      <div style="background:${C.c2};border-radius:12px;padding:13px 15px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div style="font-size:15px;color:#e2e8f0;line-height:1.8;font-style:italic;flex:1">"${esc(lat.sentence)}"</div>
+          <button onclick="speak(this)" data-t="${esc(lat.sentence)}" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:16px;margin-left:8px;flex-shrink:0">🔊</button>
+        </div>
+        <div style="font-size:13px;color:#94a3b8;margin-top:4px">${esc(lat.translation)}</div>
+        ${lat.point?`<div style="font-size:12px;color:${C.mu};border-top:1px solid ${C.b};padding-top:8px;margin-top:6px">💡 ${esc(lat.point)}</div>`:''}
+      </div>
+      ${past.length?`
+        <button onclick="SP['${id}']=!SP['${id}'];renderModal()" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:12px;padding:2px 0">
+          ${SP[id]?'▲ 閉じる':`▼ 過去の例文 (${past.length}件)`}
+        </button>
+        ${SP[id]?past.map(ex=>`<div style="background:#080f1a;border-radius:10px;padding:11px 13px;border:1px solid ${C.b};margin-top:6px;opacity:.7"><div style="font-size:13px;color:#94a3b8;font-style:italic">"${esc(ex.sentence)}"</div><div style="font-size:12px;color:${C.mu};margin-top:3px">${esc(ex.translation)}</div></div>`).join(''):''}
+      `:''}
+    `:''}
+
+    <div class="divider"></div>
+    <div class="sl">類義語・反義語</div>
+    <button onclick="doSyn('${id}')" ${isS?'disabled':''} class="btn btn-s" style="margin-bottom:${w.synonyms?'10px':'0'}">
+      ${isS?'<span class="spin"></span>取得中…':'🔗 類義語・反義語を調べる'}
+    </button>
+    ${w.synonyms?`<div style="background:${C.c2};border-radius:10px;padding:12px;font-size:13px;margin-top:8px">
+      ${w.synonyms.synonyms?.length?`<div style="font-size:10px;color:${C.mu};margin-bottom:6px">類義語</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${w.synonyms.antonyms?.length?'10px':'0'}">${w.synonyms.synonyms.map(s=>`<span style="background:#0d1b2e;padding:3px 10px;border-radius:99px;color:${C.blue}">${esc(s.word)}<span style="color:${C.mu};font-size:11px"> (${esc(s.jp)})</span></span>`).join('')}</div>`:''}
+      ${w.synonyms.antonyms?.length?`<div style="font-size:10px;color:${C.mu};margin-bottom:6px">反義語</div><div style="display:flex;flex-wrap:wrap;gap:6px">${w.synonyms.antonyms.map(s=>`<span style="background:#0d1b2e;padding:3px 10px;border-radius:99px;color:${C.red}">${esc(s.word)}<span style="color:${C.mu};font-size:11px"> (${esc(s.jp)})</span></span>`).join('')}</div>`:''}
+    </div>`:''}
+
+    <div class="divider"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div class="sl" style="margin:0">自分で作る ${lc?`<span style="margin-left:6px;color:${lc.passed?C.green:C.red}">${lc.passed?'✅':'❌'}</span>`:''}</div>
+      <button onclick="HMS['${id}']=!HMS['${id}'];renderModal()" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:11px">${HMS[id]?'▼ 開く':'▲ 閉じる'}</button>
+    </div>
+    ${!HMS[id]?`
+      <textarea class="ta" oninput="UT['${id}']=this.value" rows="2" placeholder="${esc(w.word)}を使って英文を作ってみましょう…" style="margin-bottom:8px">${sv}</textarea>
+      <button onclick="doCorr('${id}')" ${isC||!sv.trim()?'disabled':''} style="width:100%;padding:11px;border-radius:10px;border:none;background:${isC||!sv.trim()?'#1a2a3a':C.purple};color:${isC||!sv.trim()?C.mu:'#fff'};font-weight:700;cursor:${isC||!sv.trim()?'not-allowed':'pointer'};font-size:13px">
+        ${isC?'<span class="spin"></span>添削中…':'✓ 添削してもらう'}
+      </button>
+      ${lc?.feedback?`
+        <div style="background:#060d18;border:1px solid ${C.b};border-radius:10px;padding:14px;margin-top:10px">
+          <div style="font-size:10px;color:${C.mu};margin-bottom:4px">あなたの文</div>
+          <div style="font-size:13px;color:#64748b;font-style:italic;margin-bottom:8px">"${esc(lc.text)}"</div>
+          ${lc.corrected&&lc.corrected!==lc.text?`<div style="font-size:10px;color:${C.mu};margin-bottom:4px">修正後</div><div style="font-size:14px;color:${C.green};font-style:italic;margin-bottom:8px">"${esc(lc.corrected)}"</div>`
+            :`<div style="font-size:13px;color:${C.green};margin-bottom:8px">✓ 文法的に正しい文です</div>`}
+          <div style="font-size:10px;color:${C.mu};margin-bottom:4px">フィードバック</div>
+          <div style="font-size:13px;color:#94a3b8;line-height:1.7">${esc(lc.feedback)}</div>
+          <div style="margin-top:10px;padding:8px 12px;border-radius:8px;font-size:13px;background:${lc.passed?'#064e3b':'#450a0a'};color:${lc.passed?C.green:C.red}">
+            ${lc.passed?'✅ 合格：正しく使えています':'❌ 要復習：もう一度挑戦しましょう'}
+          </div>
+          ${nx?`<button onclick="markDone('${id}','${nx.key}')" style="width:100%;margin-top:10px;padding:12px;border-radius:10px;border:none;background:${C.gold};color:#000;font-weight:700;cursor:pointer;font-size:13px">✓ ${nx.label}完了</button>`:''}
+        </div>`:''}
+    `:''}
+
+    <div class="divider"></div>
+    <div class="sl">メモ</div>
+    <textarea class="ta" oninput="UN['${id}']=this.value" rows="2" placeholder="語源・覚え方・関連語など…" style="margin-bottom:8px">${esc(UN[id]||w.notes||'')}</textarea>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button onclick="saveNotes('${id}')" class="btn btn-s" style="font-size:12px;padding:7px 14px">保存</button>
+      <span id="notes-saved" style="font-size:12px;color:${C.green};opacity:0;transition:opacity .3s">✓ 保存しました</span>
+    </div>
+
+    <div class="divider"></div>
+    <button onclick="delWord('${id}')" style="width:100%;padding:11px;border-radius:10px;border:1px solid #450a0a;background:transparent;color:${C.red};font-weight:700;cursor:pointer;font-size:13px">
+      この単語を削除
+    </button>
+  `;
+}
+
+// ── SETTINGS / IMPORT ─────────────────────────────────────────
+function openSettings(){
+  document.getElementById('float-box').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-size:18px;font-weight:700">設定</div>
+      <button onclick="closeFloat()" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:22px">×</button>
+    </div>
+    <div class="sl">Anthropic APIキー</div>
+    <p style="font-size:12px;color:${C.mu};margin-bottom:10px;line-height:1.6">
+      <a href="https://console.anthropic.com" target="_blank" style="color:${C.blue}">console.anthropic.com</a> で取得できます。このデバイスのみに保存されます。
+    </p>
+    <input id="key-inp" type="password" value="${esc(getKey())}" placeholder="sk-ant-..." class="inp" style="margin-bottom:8px">
+    <button onclick="saveKey()" class="btn btn-full">保存</button>
+    <div style="border-top:1px solid ${C.b};margin:16px 0"></div>
+    <div class="sl">データ管理</div>
+    <button onclick="exportData()" class="btn btn-s btn-full" style="margin-top:8px">📤 JSONエクスポート（ダウンロード）</button>
+  `;
+  document.getElementById('float-wrap').classList.add('on');
+}
+function openImport(){
+  document.getElementById('float-box').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:18px;font-weight:700">データ取込</div>
+      <button onclick="closeFloat()" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:22px">×</button>
+    </div>
+    <p style="font-size:13px;color:${C.mu};margin-bottom:12px;line-height:1.6">エクスポートしたJSONを貼り付けてください。</p>
+    <textarea id="imp-txt" class="ta" rows="5" placeholder='[{"id":...}]' style="font-family:monospace;font-size:12px;margin-bottom:8px"></textarea>
+    <button onclick="doImport()" class="btn btn-full">取り込む</button>
+    <div id="imp-res"></div>
+  `;
+  document.getElementById('float-wrap').classList.add('on');
+}
+function closeFloat(){document.getElementById('float-wrap').classList.remove('on');}
+
+// ── INIT ──────────────────────────────────────────────────────
+document.getElementById('modal-wrap').addEventListener('click',e=>{if(e.target.id==='modal-wrap')closeModal();});
+document.getElementById('float-wrap').addEventListener('click',e=>{if(e.target.id==='float-wrap')closeFloat();});
+load();render();
+window.speechSynthesis?.getVoices();
+if(!getKey())setTimeout(openSettings,400);
+</script>
+</body>
+</html>
