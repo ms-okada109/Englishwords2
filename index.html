@@ -3,24 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>📚 単語帳</title>
+<title>📚 単語帳 + Dictation</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#080f1a;--card:#0d1b2e;--c2:#0a1525;--b:#1a3050;
-  --blue:#3b82f6;--gold:#f59e0b;--green:#10b981;--red:#ef4444;
-  --purple:#8b5cf6;--mu:#64748b
-}
+:root{--bg:#080f1a;--card:#0d1b2e;--c2:#0a1525;--b:#1a3050;--blue:#3b82f6;--gold:#f59e0b;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;--mu:#64748b}
 body{background:var(--bg);color:#e2e8f0;font-family:'Inter',system-ui,sans-serif;min-height:100vh;max-width:600px;margin:0 auto;padding-bottom:32px}
 input,textarea,button{font-family:inherit}
 .inp{width:100%;background:var(--c2);border:1px solid var(--b);border-radius:10px;color:#e2e8f0;font-size:14px;padding:10px 12px;outline:none;transition:border-color .15s}
 .inp:focus{border-color:var(--blue)}
 .ta{width:100%;background:var(--c2);border:1px solid var(--b);border-radius:10px;color:#e2e8f0;font-size:14px;padding:10px 12px;outline:none;resize:none;line-height:1.6;transition:border-color .15s}
 .ta:focus{border-color:var(--blue)}
-.btn{padding:10px 18px;border-radius:10px;border:none;background:var(--blue);color:#fff;font-weight:700;font-size:13px;cursor:pointer;transition:all .15s}
+.btn{padding:10px 18px;border-radius:10px;border:none;background:var(--blue);color:#fff;font-weight:700;font-size:13px;cursor:pointer}
 .btn:disabled{background:#1a2a3a;color:var(--mu);cursor:not-allowed}
 .btn-s{background:transparent;border:1px solid var(--b);color:var(--mu)}
-.btn-s:hover{border-color:#94a3b8;color:#94a3b8}
 .btn-full{width:100%;padding:12px}
 .card{background:var(--card);border:1px solid var(--b);border-radius:14px;padding:16px;margin-bottom:12px}
 .sl{font-size:11px;color:var(--mu);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
@@ -35,42 +30,84 @@ input,textarea,button{font-family:inherit}
 .float-box{background:var(--card);border-radius:16px;padding:22px;width:100%;max-width:440px}
 .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--b);border-top-color:var(--blue);border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:4px}
 @keyframes sp{to{transform:rotate(360deg)}}
+.d-scene-tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;background:var(--card);border-radius:12px;padding:8px;margin-bottom:14px}
+.d-scene-tabs::-webkit-scrollbar{display:none}
+.d-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px}
+.d-char{width:90px;flex-shrink:0;background:var(--card);border-radius:7px;font-size:10px;font-weight:700;color:var(--gold);padding:9px 7px;text-align:right;letter-spacing:.3px;line-height:1.4;align-self:flex-start}
+.d-inp{flex:1;background:var(--c2);border:1px solid #141420;border-radius:9px;color:#e2e8f0;font-size:14px;padding:9px 11px;resize:none;outline:none;line-height:1.6;min-height:40px;overflow:hidden;box-sizing:border-box}
+.d-inp.filled{border-color:#252535}
 </style>
 </head>
 <body>
 <div id="app"></div>
-<div class="overlay" id="modal-wrap">
-  <div class="modal" id="modal-box"></div>
-</div>
-<div class="float-overlay" id="float-wrap">
-  <div class="float-box" id="float-box"></div>
-</div>
+<div class="overlay" id="modal-wrap"><div class="modal" id="modal-box"></div></div>
+<div class="float-overlay" id="float-wrap"><div class="float-box" id="float-box"></div></div>
 
 <script>
 // ── CONSTANTS ─────────────────────────────────────────────────
-const DB='vocabapp_v3';
+const DB='vocabapp_v3', DT_KEY='dictation_v1';
 const SCHED=[{key:'day1',label:'1日後',days:1},{key:'day3',label:'3日後',days:3},{key:'week1',label:'1週間後',days:7}];
 const CTXS=['in a professional business context','in everyday casual conversation','in a literary or narrative style','in an academic setting','describing character or behavior','in a news article'];
 const C={bg:'#080f1a',card:'#0d1b2e',c2:'#0a1525',b:'#1a3050',blue:'#3b82f6',gold:'#f59e0b',green:'#10b981',red:'#ef4444',purple:'#8b5cf6',mu:'#64748b'};
 
+const PF_SCENES=[
+  {id:'s1',title:'Coffee Shop',sub:'冒頭 · Pumpkin & Honey Bunny',
+   lines:['YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','WAITRESS','YOUNG WOMAN','YOUNG MAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG MAN','WAITRESS','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','YOUNG MAN','YOUNG WOMAN','PUMPKIN','HONEY BUNNY']},
+  {id:'s2',title:"'74 Chevy",sub:'Jules & Vincent · アムステルダム',
+   lines:['JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT']},
+  {id:'s3',title:'The Apartment',sub:'Jules & Vincent · Brett',
+   lines:['JULES','JULES','BRETT','JULES','BRETT','JULES','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','VINCENT','JULES','VINCENT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','MARVIN','JULES','JULES','ROGER','VINCENT','JULES','JULES','JULES','VINCENT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES','BRETT','JULES']},
+  {id:'s4',title:'Marsellus & Butch',sub:'試合八百長の取引',
+   lines:['MARSELLUS','MARSELLUS','BUTCH','MARSELLUS','MARSELLUS','BUTCH']},
+  {id:'s5',title:"Sally LeRoy's",sub:'Vincent · English Dave · Butch',
+   lines:['ENGLISH DAVE','VINCENT','ENGLISH DAVE','ENGLISH DAVE','ENGLISH DAVE','VINCENT','ENGLISH DAVE','VINCENT','VINCENT','ENGLISH DAVE','VINCENT','ENGLISH DAVE','BUTCH','ENGLISH DAVE','BUTCH','BUTCH','VINCENT','BUTCH','VINCENT','MARSELLUS','ENGLISH DAVE']},
+  {id:'s6',title:"Lance's House",sub:'Vincent · Lance · Jody · ヘロイン購入',
+   lines:['TRUDI','JODY','TRUDI','JODY','VINCENT','JODY','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE']},
+  {id:'s7',title:"Mia's House",sub:'Vincent · Mia · インターコム',
+   lines:['MIA','VINCENT','MIA','MIA','MIA','VINCENT','MIA','VINCENT','MIA','MIA','VINCENT','MIA']},
+  {id:'s8',title:'Jackrabbit Slim\'s',sub:'Vincent & Mia',
+   lines:['VINCENT','MIA','VINCENT','MIA','BUDDY','VINCENT','BUDDY','MIA','BUDDY','MIA','BUDDY','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA']},
+  {id:'s9',title:'OD シーン',sub:'Vincent · Lance · Jody · Mia',
+   lines:['VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','JODY','LANCE','VINCENT','LANCE','VINCENT','JODY','JODY','LANCE','JODY','VINCENT','JODY','LANCE','JODY','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','JODY','LANCE','JODY','LANCE','JODY','LANCE','JODY','VINCENT','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','JODY','VINCENT','JODY','LANCE','VINCENT','LANCE','VINCENT','LANCE','JODY','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','VINCENT','LANCE','LANCE','MIA','JODY']},
+  {id:'s10',title:'After OD',sub:'Vincent & Mia · 玄関前',
+   lines:['VINCENT','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','VINCENT','VINCENT','VINCENT','MIA','VINCENT','MIA','VINCENT','MIA','MIA']},
+  {id:'s11',title:"Esmarelda's Taxi",sub:'Butch & Esmarelda',
+   lines:['ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','ESMARELDA','BUTCH','BUTCH','ESMARELDA','BUTCH','BUTCH','ESMARELDA','BUTCH','ESMARELDA']},
+  {id:'s12',title:'The Motel',sub:'Butch & Fabienne · 夜〜朝',
+   lines:['FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH']},
+  {id:'s13',title:'The Pawnshop',sub:'Butch · Marsellus · Maynard · Zed',
+   lines:['MAYNARD','BUTCH','MAYNARD','BUTCH','BUTCH','MAYNARD','BUTCH','MAYNARD','MAYNARD','MAYNARD','MAYNARD','ZED','MAYNARD','ZED','MAYNARD','ZED','ZED','MAYNARD','ZED','MAYNARD','ZED','MAYNARD','ZED','MAYNARD','MAYNARD','MAYNARD','ZED','MAYNARD','MAYNARD','MAYNARD','ZED','THE GIMP','BUTCH','BUTCH','MARSELLUS','MARSELLUS','BUTCH','MARSELLUS','BUTCH','MARSELLUS','MARSELLUS','BUTCH','MARSELLUS','BUTCH','MARSELLUS','BUTCH','MARSELLUS','MARSELLUS','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH','FABIENNE','BUTCH']},
+  {id:'s14',title:'Divine Intervention',sub:'Jules · Vincent · Marvin · 車内',
+   lines:['JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','MARVIN','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','VINCENT','JULES','VINCENT','JULES']},
+  {id:'s15',title:"Jimmie's / The Wolf",sub:'Jules · Vincent · Jimmie · The Wolf',
+   lines:['JULES','VINCENT','JULES','VINCENT','JULES','JIMMIE','JULES','JIMMIE','JULES','JIMMIE','JULES','JIMMIE','JULES','JIMMIE','JULES','JIMMIE','JULES','THE WOLF','JIMMIE','THE WOLF','JIMMIE','THE WOLF','JIMMIE','THE WOLF','JIMMIE','THE WOLF','JULES','THE WOLF','JULES','THE WOLF','VINCENT','THE WOLF','JULES','THE WOLF','JIMMIE','THE WOLF','JIMMIE','THE WOLF','JIMMIE','THE WOLF','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','THE WOLF','JULES','THE WOLF','VINCENT','THE WOLF']},
+  {id:'s16',title:"Monster Joe's",sub:'Jules · Vincent · Winston · Raquel',
+   lines:['JULES','WINSTON','WINSTON','RAQUEL','WINSTON','VINCENT','JULES','WINSTON','WINSTON','WINSTON','RAQUEL','WINSTON','JULES','JULES','WINSTON','WINSTON','RAQUEL','WINSTON','RAQUEL']},
+  {id:'s17',title:'Coffee Shop 終盤',sub:'Jules · Vincent · Pumpkin · Yolanda',
+   lines:['JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','JULES','VINCENT','PUMPKIN','HONEY BUNNY','MANAGER','PUMPKIN','HONEY BUNNY','MANAGER','PUMPKIN','MANAGER','PUMPKIN','JULES','PUMPKIN','JULES','HONEY BUNNY','JULES','YOLANDA','JULES','YOLANDA','JULES','PUMPKIN','JULES','YOLANDA','JULES','PUMPKIN','JULES','PUMPKIN','JULES','PUMPKIN','JULES','PUMPKIN','JULES','VINCENT','JULES','VINCENT','JULES']},
+];
+
 // ── STATE ─────────────────────────────────────────────────────
 let D={words:[],settings:{apiKey:''}};
-let TAB='today';
-let MID=null; // modal word id
+let TAB='today', MID=null;
 const GEN=new Set(),CORR=new Set(),SYN=new Set();
 let FS={idx:0,flipped:false,mode:'all',know:0,retry:0};
-let SQ=''; // search query
-const UT={},UN={},SP={},HMS={},SH={}; // transient: userText, userNotes, showPast, hideMySent
+let SQ='';
+const UT={},UN={},SP={},HMS={},SH={};
+let DTAB='s1', DT={}, DX={}, dtTimer=null;
 
 // ── DATA ──────────────────────────────────────────────────────
-function load(){try{const r=localStorage.getItem(DB);if(r)D=JSON.parse(r);}catch(e){}}
+function load(){
+  try{const r=localStorage.getItem(DB);if(r)D=JSON.parse(r);}catch(e){}
+  try{const r=localStorage.getItem(DT_KEY);if(r){const d=JSON.parse(r);DT=d.lines||{};DX=d.extra||{};}}catch(e){}
+}
 function persist(){try{localStorage.setItem(DB,JSON.stringify(D));}catch(e){}}
+function saveDT(){clearTimeout(dtTimer);dtTimer=setTimeout(()=>localStorage.setItem(DT_KEY,JSON.stringify({lines:DT,extra:DX})),600);}
 function getKey(){return D.settings.apiKey||'';}
 
 function importWords(str){
   try{
-    const arr=JSON.parse(str);
-    if(!Array.isArray(arr))return'形式が正しくありません';
+    const arr=JSON.parse(str);if(!Array.isArray(arr))return'形式が正しくありません';
     const ex=new Set(D.words.map(w=>String(w.id)));
     const ns=arr.filter(x=>x.word&&!ex.has(String(x.id))).map(x=>({
       id:x.id||Date.now()+Math.random(),word:x.word,meaning:x.meaning||'',
@@ -78,8 +115,7 @@ function importWords(str){
       examples:x.examples||[],userSentences:x.userSentences||[],
       reviews:x.reviews||{day1:null,day3:null,week1:null},notes:x.notes||'',
     }));
-    D.words=[...ns,...D.words];persist();
-    return`${ns.length}語を取り込みました`;
+    D.words=[...ns,...D.words];persist();return`${ns.length}語を取り込みました`;
   }catch(e){return'エラー: '+e.message;}
 }
 
@@ -92,20 +128,21 @@ function fmtDate(s){
   if(s===t)return'今日';if(s===y)return'昨日';
   const[yr,m,d]=s.split('-');return`${yr}年${+m}月${+d}日`;
 }
-function revSt(w){
-  const at=w.addedAt||+w.id,el=Date.now()-at;
-  return SCHED.map(s=>({...s,due:el>=s.days*864e5,done:!!(w.reviews?.[s.key])}));
-}
+function revSt(w){const at=w.addedAt||+w.id,el=Date.now()-at;return SCHED.map(s=>({...s,due:el>=s.days*864e5,done:!!(w.reviews?.[s.key])}));}
 function isDue(w){return revSt(w).some(s=>s.due&&!s.done);}
 function isDone(w){return revSt(w).every(s=>s.done);}
 function streak(){
-  const dates=new Set(D.words.map(w=>w.dateStr));
-  let n=0;const d=new Date();
+  const dates=new Set(D.words.map(w=>w.dateStr));let n=0;const d=new Date();
   while(true){const k=ts2d(d.getTime());if(dates.has(k)){n++;d.setDate(d.getDate()-1);}else if(k===today()){d.setDate(d.getDate()-1);}else break;}
   return n;
 }
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function sd(el){return esc(el?.dataset?.t||'');}
+function dProg(scene){
+  const d=DT[scene.id]||{};
+  const f=scene.lines.filter((_,i)=>(d[i]||'').trim()).length;
+  const ef=(DX[scene.id]||[]).filter(e=>(e.text||'').trim()).length;
+  return{filled:f+ef,total:scene.lines.length+(DX[scene.id]||[]).length};
+}
 
 // ── TTS ───────────────────────────────────────────────────────
 function speak(btn){
@@ -130,7 +167,6 @@ async function callAPI(sys,user,max=500){
   return(await r.json()).content[0].text;
 }
 const pj=t=>JSON.parse(t.replace(/```json|```/g,'').trim());
-
 async function apiEx(word,meaning){
   const ctx=CTXS[Math.floor(Math.random()*CTXS.length)];
   return pj(await callAPI('You are an English vocabulary teacher for Japanese learners. Return ONLY valid JSON, no markdown.',
@@ -145,7 +181,7 @@ async function apiSyn(word,meaning){
     `For "${word}"(${meaning||''}), list synonyms and antonyms with Japanese. JSON:\n{"synonyms":[{"word":"","jp":""}],"antonyms":[{"word":"","jp":""}]}`));
 }
 
-// ── ACTIONS ───────────────────────────────────────────────────
+// ── VOCAB ACTIONS ─────────────────────────────────────────────
 function addWord(){
   const wi=document.getElementById('wi'),mi=document.getElementById('mi');
   const word=wi?.value.trim();if(!word)return;
@@ -153,12 +189,10 @@ function addWord(){
   D.words.unshift(e);persist();if(wi)wi.value='';if(mi)mi.value='';
   render();doGen(e.id);
 }
-
 async function doGen(id){
   const w=D.words.find(w=>String(w.id)===String(id));if(!w||GEN.has(String(id)))return;
   if(!getKey()){openSettings();return;}
-  GEN.add(String(id));
-  if(String(MID)===String(id))renderModal();
+  GEN.add(String(id));if(String(MID)===String(id))renderModal();
   try{
     const r=await apiEx(w.word,w.meaning);
     const ww=D.words.find(w=>String(w.id)===String(id));
@@ -166,10 +200,9 @@ async function doGen(id){
   }catch(e){if(e.message==='NO_KEY')openSettings();}
   GEN.delete(String(id));render();if(String(MID)===String(id))renderModal();
 }
-
 async function doCorr(id){
   const w=D.words.find(w=>String(w.id)===String(id));if(!w||CORR.has(String(id)))return;
-  const text=UT[String(id)]||document.querySelector(`#modal-box textarea`)?.value||'';
+  const text=UT[String(id)]||document.querySelector('#modal-box textarea')?.value||'';
   if(!text.trim()){alert('文章を入力してください');return;}
   if(!getKey()){openSettings();return;}
   CORR.add(String(id));renderModal();
@@ -180,7 +213,6 @@ async function doCorr(id){
   }catch(e){console.error(e);}
   CORR.delete(String(id));render();if(String(MID)===String(id))renderModal();
 }
-
 async function doSyn(id){
   const w=D.words.find(w=>String(w.id)===String(id));if(!w||SYN.has(String(id)))return;
   if(!getKey()){openSettings();return;}
@@ -192,11 +224,9 @@ async function doSyn(id){
   }catch(e){console.error(e);}
   SYN.delete(String(id));if(String(MID)===String(id))renderModal();
 }
-
 function markDone(id,key){
   const w=D.words.find(w=>String(w.id)===String(id));if(!w)return;
-  w.reviews[key]={ts:Date.now()};persist();
-  render();if(String(MID)===String(id))renderModal();
+  w.reviews[key]={ts:Date.now()};persist();render();if(String(MID)===String(id))renderModal();
 }
 function saveNotes(id){
   const w=D.words.find(w=>String(w.id)===String(id));if(!w)return;
@@ -205,8 +235,7 @@ function saveNotes(id){
 }
 function delWord(id){
   if(!confirm('この単語を削除しますか？'))return;
-  D.words=D.words.filter(w=>String(w.id)!==String(id));persist();
-  closeModal();render();
+  D.words=D.words.filter(w=>String(w.id)!==String(id));persist();closeModal();render();
 }
 function exportData(){
   const b=new Blob([JSON.stringify(D.words,null,2)],{type:'application/json'});
@@ -228,6 +257,39 @@ function flipCard(){FS.flipped=!FS.flipped;const el=document.getElementById('fc'
 function cardKnow(){FS.know++;FS.flipped=false;FS.idx++;const el=document.getElementById('fc');if(el)el.innerHTML=buildFC();}
 function cardRetry(){FS.retry++;FS.flipped=false;FS.idx++;const el=document.getElementById('fc');if(el)el.innerHTML=buildFC();}
 
+// ── DICTATION ACTIONS ─────────────────────────────────────────
+function setDLine(sid,idx,val){if(!DT[sid])DT[sid]={};DT[sid][idx]=val;saveDT();}
+function setDExtra(sid,idx,field,val){
+  if(!DX[sid])DX[sid]=[];
+  if(!DX[sid][idx])DX[sid][idx]={char:'',text:''};
+  DX[sid][idx][field]=val;saveDT();
+}
+function addDLine(sid){
+  if(!DX[sid])DX[sid]=[];DX[sid].push({char:'',text:''});saveDT();
+  document.getElementById('d-content').innerHTML=buildDContent();
+}
+function removeDLine(sid,idx){
+  if(!DX[sid])return;DX[sid].splice(idx,1);saveDT();
+  document.getElementById('d-content').innerHTML=buildDContent();
+}
+function clearDScene(sid){
+  if(!confirm('このシーンの入力内容をクリアしますか？'))return;
+  DT[sid]={};DX[sid]=[];saveDT();
+  document.getElementById('d-content').innerHTML=buildDContent();
+}
+function switchDScene(id){
+  DTAB=id;
+  document.getElementById('d-content').innerHTML=buildDContent();
+  // Update tab styles
+  document.querySelectorAll('.d-tab-btn').forEach(btn=>{
+    const on=btn.dataset.id===id;
+    btn.style.background=on?C.c2:'transparent';
+    btn.style.borderBottom=`2px solid ${on?C.gold:'transparent'}`;
+    btn.style.color=on?'#f1f5f9':C.mu;
+    btn.style.fontWeight=on?'700':'400';
+  });
+}
+
 // ── RENDER ────────────────────────────────────────────────────
 function setTab(t){TAB=t;FS={idx:0,flipped:false,mode:FS.mode,know:0,retry:0};render();}
 
@@ -241,16 +303,16 @@ function render(){
           ${[['📤','エクスポート','exportData()'],['📥','インポート','openImport()'],['⚙️','設定','openSettings()']].map(([ic,tt,fn])=>`<button onclick="${fn}" title="${tt}" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:17px;padding:4px 7px">${ic}</button>`).join('')}
         </div>
       </div>
-      <div style="display:flex;padding:0 6px">
-        ${[['today','今日'],['book','単語帳'],['flash','🃏'],['tests','テスト'],['stats','統計']].map(([id,lbl])=>{
+      <div style="display:flex;padding:0 4px">
+        ${[['today','今日'],['book','単語帳'],['flash','🃏'],['tests','テスト'],['stats','統計'],['dictation','🎬']].map(([id,lbl])=>{
           const on=TAB===id;
           const badge=id==='tests'&&due>0?`<span style="position:absolute;top:4px;right:calc(50% - 18px);background:${C.red};color:#fff;font-size:9px;font-weight:700;border-radius:99px;padding:1px 4px">${due}</span>`:'';
-          return`<button onclick="setTab('${id}')" style="flex:1;padding:9px 0;background:none;border:none;cursor:pointer;font-size:12px;font-weight:${on?700:400};color:${on?'#f1f5f9':C.mu};border-bottom:3px solid ${on?C.gold:'transparent'};position:relative;transition:all .15s">${lbl}${badge}</button>`;
+          return`<button onclick="setTab('${id}')" style="flex:1;padding:9px 0;background:none;border:none;cursor:pointer;font-size:11px;font-weight:${on?700:400};color:${on?'#f1f5f9':C.mu};border-bottom:3px solid ${on?C.gold:'transparent'};position:relative;transition:all .15s">${lbl}${badge}</button>`;
         }).join('')}
       </div>
     </div>
     <div style="padding:16px 16px 48px">
-      ${TAB==='today'?bToday():TAB==='book'?bBook():TAB==='flash'?bFlash():TAB==='tests'?bTests():bStats()}
+      ${TAB==='today'?bToday():TAB==='book'?bBook():TAB==='flash'?bFlash():TAB==='tests'?bTests():TAB==='stats'?bStats():bDictation()}
     </div>
   `;
 }
@@ -299,7 +361,6 @@ function bBookList(){
       <div style="font-size:12px;color:${C.mu}">${g[d].length}語</div>
     </div>${g[d].map(bWI).join('')}`).join('');
 }
-
 function bWI(w){
   const due=isDue(w),done=isDone(w);
   return`<div onclick="openModal('${w.id}')" style="display:flex;align-items:center;gap:10px;padding:11px 14px;background:${C.c2};border:1px solid ${C.b};border-radius:10px;margin-bottom:6px;cursor:pointer">
@@ -312,7 +373,7 @@ function bWI(w){
   </div>`;
 }
 
-// ── FLASHCARD ─────────────────────────────────────────────────
+// ── FLASH ─────────────────────────────────────────────────────
 function bFlash(){
   return`
     <div style="display:flex;gap:8px;margin-bottom:16px">
@@ -325,8 +386,7 @@ function bFlash(){
 function buildFC(){
   const pool=(FS.mode==='due'?D.words.filter(isDue):D.words).filter(w=>w.examples.length>0||w.meaning);
   if(!pool.length)return`<div style="text-align:center;color:${C.mu};padding:48px 0;font-size:14px;line-height:2">${FS.mode==='due'?'テスト待ちの単語がありません':'まず単語を追加してください'}</div>`;
-  const card=pool[FS.idx%pool.length];
-  const tot=FS.know+FS.retry;
+  const card=pool[FS.idx%pool.length];const tot=FS.know+FS.retry;
   return`
     ${tot>0?`<div style="display:flex;gap:10px;margin-bottom:14px">
       <div style="flex:1;background:#064e3b;border-radius:10px;padding:8px 12px;text-align:center"><div style="font-size:20px;font-weight:700;color:${C.green}">${FS.know}</div><div style="font-size:11px;color:#6ee7b7">知ってた</div></div>
@@ -392,8 +452,7 @@ function bStats(){
           </div>`).join('')}
       </div>
     </div>
-    ${D.words.length?`
-    <div style="background:${C.card};border:1px solid ${C.b};border-radius:14px;padding:18px">
+    ${D.words.length?`<div style="background:${C.card};border:1px solid ${C.b};border-radius:14px;padding:18px">
       <div class="sl">学習進捗</div>
       ${[[wex,D.words.length,'例文あり',C.blue],[mas,D.words.length,'マスター済み',C.green]].map(([v,tot,l,c])=>`
         <div style="margin-bottom:14px">
@@ -408,15 +467,82 @@ function bStats(){
   `;
 }
 
+// ── DICTATION ─────────────────────────────────────────────────
+function bDictation(){
+  const totalFilled=PF_SCENES.reduce((s,sc)=>s+dProg(sc).filled,0);
+  const totalLines=PF_SCENES.reduce((s,sc)=>s+dProg(sc).total,0);
+  return`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div>
+        <div style="font-size:16px;font-weight:900;letter-spacing:-.3px">🎬 Pulp Fiction</div>
+        <div style="font-size:11px;color:${C.mu};margin-top:2px">全17シーン · ${totalFilled}/${totalLines} 行入力済み</div>
+      </div>
+    </div>
+    <div class="d-scene-tabs">
+      ${PF_SCENES.map(s=>{
+        const{filled,total}=dProg(s);
+        const pct=total>0?Math.round((filled/total)*100):0;
+        const on=DTAB===s.id;
+        return`<button class="d-tab-btn" data-id="${s.id}" onclick="switchDScene('${s.id}')"
+          style="padding:7px 12px;border-radius:8px;border:none;cursor:pointer;background:${on?C.c2:'transparent'};border-bottom:2px solid ${on?C.gold:'transparent'};color:${on?'#f1f5f9':C.mu};font-size:12px;font-weight:${on?700:400};white-space:nowrap;flex-shrink:0">
+          ${esc(s.title)}${pct===100?' ✓':pct>0?` ${pct}%`:''}
+        </button>`;}).join('')}
+    </div>
+    <div id="d-content">${buildDContent()}</div>
+  `;
+}
+
+function buildDContent(){
+  const scene=PF_SCENES.find(s=>s.id===DTAB);if(!scene)return'';
+  const{filled,total}=dProg(scene);
+  const d=DT[scene.id]||{},extras=DX[scene.id]||[];
+  const pct=total>0?Math.round((filled/total)*100):0;
+  return`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div>
+        <div style="font-weight:700;font-size:15px">${esc(scene.title)}</div>
+        <div style="font-size:11px;color:${C.mu};margin-top:2px">${esc(scene.sub)}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="text-align:right">
+          <div style="font-size:13px;font-weight:700;color:${pct===100?C.green:C.gold}">${filled}<span style="color:${C.mu};font-weight:400">/${total}</span></div>
+          ${pct>0?`<div style="font-size:10px;color:${C.mu}">${pct}%</div>`:''}
+        </div>
+        <button onclick="clearDScene('${scene.id}')" style="font-size:11px;color:${C.mu};background:${C.card};border:1px solid ${C.b};border-radius:6px;cursor:pointer;padding:3px 8px">クリア</button>
+      </div>
+    </div>
+    <div>
+      ${scene.lines.map((char,idx)=>{
+        const val=esc(d[idx]||'');
+        return`<div class="d-row">
+          <div class="d-char">${esc(char)}</div>
+          <textarea class="d-inp${val.trim()?' filled':''}" rows="1"
+            oninput="setDLine('${scene.id}','${idx}',this.value);this.classList.toggle('filled',this.value.trim().length>0);this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+            placeholder="…">${val}</textarea>
+        </div>`;}).join('')}
+      ${extras.map((e,idx)=>`
+        <div class="d-row">
+          <input value="${esc(e.char||'')}" oninput="setDExtra('${scene.id}','${idx}','char',this.value)"
+            placeholder="名前" style="width:90px;flex-shrink:0;background:${C.card};border:1px solid ${C.b};border-radius:7px;color:${C.gold};font-size:10px;font-weight:700;padding:9px 7px;outline:none;text-align:right;letter-spacing:.3px">
+          <textarea class="d-inp" rows="1"
+            oninput="setDExtra('${scene.id}','${idx}','text',this.value);this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+            placeholder="…">${esc(e.text||'')}</textarea>
+          <button onclick="removeDLine('${scene.id}',${idx})" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:16px;padding:8px 4px;align-self:flex-start">×</button>
+        </div>`).join('')}
+    </div>
+    <button onclick="addDLine('${scene.id}')" style="margin-top:12px;width:100%;padding:10px;border-radius:10px;border:1px dashed ${C.b};background:transparent;color:${C.mu};cursor:pointer;font-size:13px">＋ 行を追加</button>
+  `;
+}
+
 // ── MODAL ─────────────────────────────────────────────────────
 function openModal(id){
   MID=id;const sid=String(id);
-  const w=D.words.find(w=>String(w.id)===sid);
-  if(!w)return;
+  const w=D.words.find(w=>String(w.id)===sid);if(!w)return;
   if(UT[sid]===undefined)UT[sid]=w.userSentences?.[0]?.text||'';
   if(UN[sid]===undefined)UN[sid]=w.notes||'';
   if(HMS[sid]===undefined)HMS[sid]=false;
   if(SP[sid]===undefined)SP[sid]=false;
+  if(SH[sid]===undefined)SH[sid]=false;
   document.getElementById('modal-wrap').classList.add('on');
   renderModal();
 }
@@ -441,7 +567,6 @@ function renderModal(){
         <div style="font-size:13px;color:#94a3b8;margin-top:2px">${esc(w.meaning)||'意味未登録'} · ${fmtDate(w.dateStr||today())}</div>
       </div>
     </div>
-
     <div style="display:flex;gap:6px;margin-bottom:14px">
       ${st.map(s=>`<div style="flex:1;text-align:center;padding:8px 4px;border-radius:8px;background:${s.done?'#064e3b':s.due?'#450a0a':C.c2};border:1px solid ${s.done?C.green:s.due?C.red:C.b}">
         <div style="font-size:11px;font-weight:700;color:${s.done?C.green:s.due?C.red:C.mu}">${s.label.replace('後テスト','後')}</div>
@@ -449,7 +574,6 @@ function renderModal(){
       </div>`).join('')}
     </div>
     ${nx?`<div style="background:#1a0808;border:1px solid #450a0a;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#fca5a5">📋 ${nx.label}が来ています</div>`:''}
-
     <div class="sl">AI例文</div>
     <button onclick="doGen('${id}')" ${isG?'disabled':''} style="width:100%;padding:11px;border-radius:10px;border:${lat?`1px solid #1e3a5f`:'none'};background:${isG?'#1a2a3a':lat?'#1a3050':C.blue};color:${isG?C.mu:lat?'#60a5fa':'#fff'};font-weight:700;cursor:${isG?'not-allowed':'pointer'};font-size:13px;margin-bottom:8px">
       ${isG?'<span class="spin"></span>生成中…':lat?'↺ 別の例文を生成':'▶ 例文を生成'}
@@ -470,7 +594,6 @@ function renderModal(){
         ${SP[id]?past.map(ex=>`<div style="background:#080f1a;border-radius:10px;padding:11px 13px;border:1px solid ${C.b};margin-top:6px;opacity:.7"><div style="font-size:13px;color:#94a3b8;font-style:italic">"${esc(ex.sentence)}"</div><div style="font-size:12px;color:${C.mu};margin-top:3px">${esc(ex.translation)}</div></div>`).join(''):''}
       `:''}
     `:''}
-
     <div class="divider"></div>
     <div class="sl">類義語・反義語</div>
     <button onclick="doSyn('${id}')" ${isS?'disabled':''} class="btn btn-s" style="margin-bottom:${w.synonyms?'10px':'0'}">
@@ -480,7 +603,6 @@ function renderModal(){
       ${w.synonyms.synonyms?.length?`<div style="font-size:10px;color:${C.mu};margin-bottom:6px">類義語</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${w.synonyms.antonyms?.length?'10px':'0'}">${w.synonyms.synonyms.map(s=>`<span style="background:#0d1b2e;padding:3px 10px;border-radius:99px;color:${C.blue}">${esc(s.word)}<span style="color:${C.mu};font-size:11px"> (${esc(s.jp)})</span></span>`).join('')}</div>`:''}
       ${w.synonyms.antonyms?.length?`<div style="font-size:10px;color:${C.mu};margin-bottom:6px">反義語</div><div style="display:flex;flex-wrap:wrap;gap:6px">${w.synonyms.antonyms.map(s=>`<span style="background:#0d1b2e;padding:3px 10px;border-radius:99px;color:${C.red}">${esc(s.word)}<span style="color:${C.mu};font-size:11px"> (${esc(s.jp)})</span></span>`).join('')}</div>`:''}
     </div>`:''}
-
     <div class="divider"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="sl" style="margin:0">自分で作る ${lc?`<span style="margin-left:6px;color:${lc.passed?C.green:C.red}">${lc.passed?'✅':'❌'}</span>`:''}</div>
@@ -505,7 +627,7 @@ function renderModal(){
           ${nx?`<button onclick="markDone('${id}','${nx.key}')" style="width:100%;margin-top:10px;padding:12px;border-radius:10px;border:none;background:${C.gold};color:#000;font-weight:700;cursor:pointer;font-size:13px">✓ ${nx.label}完了</button>`:''}
         </div>`:''}
       ${w.userSentences?.length?`
-        <button onclick="SH['${id}']=!SH['${id}'];renderModal()" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:12px;padding:6px 0;font-family:inherit;margin-top:6px;display:block">
+        <button onclick="SH['${id}']=!SH['${id}'];renderModal()" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:12px;padding:6px 0;display:block;margin-top:6px">
           ${SH[id]?'▲ 閉じる':'📖 添削履歴 ('+w.userSentences.length+'件)'}
         </button>
         ${SH[id]?`<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
@@ -522,7 +644,6 @@ function renderModal(){
         </div>`:''}
       `:''}
     `:''}
-
     <div class="divider"></div>
     <div class="sl">メモ</div>
     <textarea class="ta" oninput="UN['${id}']=this.value" rows="2" placeholder="語源・覚え方・関連語など…" style="margin-bottom:8px">${esc(UN[id]||w.notes||'')}</textarea>
@@ -530,7 +651,6 @@ function renderModal(){
       <button onclick="saveNotes('${id}')" class="btn btn-s" style="font-size:12px;padding:7px 14px">保存</button>
       <span id="notes-saved" style="font-size:12px;color:${C.green};opacity:0;transition:opacity .3s">✓ 保存しました</span>
     </div>
-
     <div class="divider"></div>
     <button onclick="delWord('${id}')" style="width:100%;padding:11px;border-radius:10px;border:1px solid #450a0a;background:transparent;color:${C.red};font-weight:700;cursor:pointer;font-size:13px">
       この単語を削除
@@ -547,13 +667,13 @@ function openSettings(){
     </div>
     <div class="sl">Anthropic APIキー</div>
     <p style="font-size:12px;color:${C.mu};margin-bottom:10px;line-height:1.6">
-      <a href="https://console.anthropic.com" target="_blank" style="color:${C.blue}">console.anthropic.com</a> で取得できます。このデバイスのみに保存されます。
+      <a href="https://console.anthropic.com" target="_blank" style="color:${C.blue}">console.anthropic.com</a> で取得。このデバイスのみに保存されます。
     </p>
     <input id="key-inp" type="password" value="${esc(getKey())}" placeholder="sk-ant-..." class="inp" style="margin-bottom:8px">
     <button onclick="saveKey()" class="btn btn-full">保存</button>
-    <div style="border-top:1px solid ${C.b};margin:16px 0"></div>
+    <div class="divider"></div>
     <div class="sl">データ管理</div>
-    <button onclick="exportData()" class="btn btn-s btn-full" style="margin-top:8px">📤 JSONエクスポート（ダウンロード）</button>
+    <button onclick="exportData()" class="btn btn-s btn-full" style="margin-top:8px">📤 単語帳をJSONエクスポート</button>
   `;
   document.getElementById('float-wrap').classList.add('on');
 }
