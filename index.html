@@ -280,14 +280,13 @@ function clearDScene(sid){
 function switchDScene(id){
   DTAB=id;
   document.getElementById('d-content').innerHTML=buildDContent();
-  // Update tab styles
-  document.querySelectorAll('.d-tab-btn').forEach(btn=>{
-    const on=btn.dataset.id===id;
-    btn.style.background=on?C.c2:'transparent';
-    btn.style.borderBottom=`2px solid ${on?C.gold:'transparent'}`;
-    btn.style.color=on?'#f1f5f9':C.mu;
-    btn.style.fontWeight=on?'700':'400';
-  });
+  const sel=document.getElementById('scene-sel');
+  if(sel)sel.value=DTAB;
+}
+function navDScene(dir){
+  const idx=PF_SCENES.findIndex(s=>s.id===DTAB);
+  const ni=Math.max(0,Math.min(PF_SCENES.length-1,idx+dir));
+  if(ni!==idx){DTAB=PF_SCENES[ni].id;document.getElementById('d-content').innerHTML=buildDContent();const sel=document.getElementById('scene-sel');if(sel)sel.value=DTAB;}
 }
 
 // ── RENDER ────────────────────────────────────────────────────
@@ -469,24 +468,24 @@ function bStats(){
 
 // ── DICTATION ─────────────────────────────────────────────────
 function bDictation(){
-  const totalFilled=PF_SCENES.reduce((s,sc)=>s+dProg(sc).filled,0);
-  const totalLines=PF_SCENES.reduce((s,sc)=>s+dProg(sc).total,0);
+  const tf=PF_SCENES.reduce((s,sc)=>s+dProg(sc).filled,0);
+  const tl=PF_SCENES.reduce((s,sc)=>s+dProg(sc).total,0);
+  const ci=PF_SCENES.findIndex(s=>s.id===DTAB);
   return`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div>
-        <div style="font-size:16px;font-weight:900;letter-spacing:-.3px">🎬 Pulp Fiction</div>
-        <div style="font-size:11px;color:${C.mu};margin-top:2px">全17シーン · ${totalFilled}/${totalLines} 行入力済み</div>
-      </div>
-    </div>
-    <div class="d-scene-tabs">
-      ${PF_SCENES.map(s=>{
+    <div style="font-size:16px;font-weight:900;letter-spacing:-.3px;margin-bottom:4px">🎬 Pulp Fiction</div>
+    <div style="font-size:11px;color:${C.mu};margin-bottom:12px">全17シーン · ${tf}/${tl} 行入力済み</div>
+    <select id="scene-sel" onchange="switchDScene(this.value)"
+      style="width:100%;background:${C.c2};border:1px solid ${C.b};border-radius:10px;color:#e2e8f0;font-size:14px;padding:10px 12px;outline:none;cursor:pointer;margin-bottom:10px;box-sizing:border-box">
+      ${PF_SCENES.map((s,i)=>{
         const{filled,total}=dProg(s);
         const pct=total>0?Math.round((filled/total)*100):0;
-        const on=DTAB===s.id;
-        return`<button class="d-tab-btn" data-id="${s.id}" onclick="switchDScene('${s.id}')"
-          style="padding:7px 12px;border-radius:8px;border:none;cursor:pointer;background:${on?C.c2:'transparent'};border-bottom:2px solid ${on?C.gold:'transparent'};color:${on?'#f1f5f9':C.mu};font-size:12px;font-weight:${on?700:400};white-space:nowrap;flex-shrink:0">
-          ${esc(s.title)}${pct===100?' ✓':pct>0?` ${pct}%`:''}
-        </button>`;}).join('')}
+        return`<option value="${s.id}" ${DTAB===s.id?'selected':''}>${i+1}. ${pct===100?'✓ ':''}${s.title}${pct>0&&pct<100?` (${pct}%)`:''}  —  ${esc(s.sub)}</option>`;
+      }).join('')}
+    </select>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button onclick="navDScene(-1)" ${ci===0?'disabled':''} style="flex:1;padding:9px;border-radius:10px;border:1px solid ${C.b};background:transparent;color:${ci===0?C.b:C.mu};cursor:${ci===0?'default':'pointer'};font-size:13px">← 前のシーン</button>
+      <div style="display:flex;align-items:center;font-size:12px;color:${C.mu};white-space:nowrap">${ci+1} / ${PF_SCENES.length}</div>
+      <button onclick="navDScene(1)" ${ci===PF_SCENES.length-1?'disabled':''} style="flex:1;padding:9px;border-radius:10px;border:1px solid ${C.b};background:transparent;color:${ci===PF_SCENES.length-1?C.b:C.mu};cursor:${ci===PF_SCENES.length-1?'default':'pointer'};font-size:13px">次のシーン →</button>
     </div>
     <div id="d-content">${buildDContent()}</div>
   `;
