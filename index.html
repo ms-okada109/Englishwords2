@@ -674,22 +674,18 @@ function openSettings(){
     <div class="divider"></div>
     <div class="sl">☁️ クラウド同期（GitHub Gist）</div>
     <p style="font-size:12px;color:${C.mu};margin-bottom:10px;line-height:1.7">
-      <a href="https://github.com/settings/tokens/new" target="_blank" style="color:${C.blue}">github.com/settings/tokens</a> でトークンを作成してください。<br>
-      スコープは <code style="background:#0a1525;padding:1px 6px;border-radius:4px;font-size:11px">gist</code> のみ選択すればOKです。
+      <a href="https://github.com/settings/tokens/new" target="_blank" style="color:${C.blue}">github.com/settings/tokens</a> でトークンを作成。スコープは <code style="background:#0a1525;padding:1px 6px;border-radius:4px;font-size:11px">gist</code> のみでOK。
     </p>
-    <input id="gh-token-inp" type="password" value="${esc(D.settings.githubToken||'')}" placeholder="ghp_xxxxxxxxxxxx" class="inp" style="margin-bottom:8px">
-    ${D.settings.gistId?`
-    <p style="font-size:11px;color:${C.mu};margin:8px 0 4px">Gist ID（スマホに貼り付けてください）</p>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input value="${esc(D.settings.gistId)}" readonly
-        style="flex:1;background:#060d18;border:1px solid ${C.b};border-radius:8px;color:#94a3b8;font-size:12px;padding:8px 10px;outline:none;font-family:monospace">
-      <button onclick="navigator.clipboard.writeText('${esc(D.settings.gistId)}').then(()=>alert('コピーしました'))"
-        style="padding:8px 12px;border-radius:8px;border:none;background:${C.c2};color:${C.mu};cursor:pointer;font-size:12px;white-space:nowrap">コピー</button>
+    <p style="font-size:11px;color:${C.mu};margin-bottom:4px">GitHubトークン</p>
+    <input id="gh-token-inp" type="password" value="${esc(D.settings.githubToken||'')}" placeholder="ghp_xxxxxxxxxxxx" class="inp" style="margin-bottom:12px">
+    <p style="font-size:11px;color:${C.mu};margin-bottom:4px">Gist ID <span style="color:#444">(初回保存後に自動入力。他デバイスには手動でコピー)</span></p>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="gh-gist-inp" type="text" value="${esc(D.settings.gistId||'')}" placeholder="自動入力 または 他デバイスのIDを貼り付け"
+        style="flex:1;background:${C.c2};border:1px solid ${C.b};border-radius:10px;color:#e2e8f0;font-size:12px;padding:9px 12px;outline:none;font-family:monospace">
+      <button onclick="const v=document.getElementById('gh-gist-inp').value;if(v){navigator.clipboard.writeText(v).then(()=>alert('コピーしました✓')).catch(()=>alert(v));}else{alert('まだGist IDがありません。先に☁️↑で保存してください');}"
+        style="padding:9px 14px;border-radius:10px;border:none;background:${C.c2};color:${C.mu};cursor:pointer;font-size:13px;white-space:nowrap;border:1px solid ${C.b}">コピー</button>
     </div>
-    `:''}
-    <input id="gh-gist-inp" type="text" value="${esc(D.settings.gistId||'')}" placeholder="他デバイスのGist IDをここに貼り付け"
-      style="width:100%;background:${C.c2};border:1px solid ${C.b};border-radius:10px;color:#e2e8f0;font-size:13px;padding:10px 12px;outline:none;box-sizing:border-box;margin-top:8px">
-    <button onclick="saveGithubToken()" class="btn btn-full" style="background:#238636;margin-top:8px">保存</button>
+    <button onclick="saveGithubToken()" class="btn btn-full" style="background:#238636">保存</button>
     <div class="divider"></div>
     <div class="sl">データ管理</div>
     <button onclick="exportData()" class="btn btn-s btn-full" style="margin-top:8px">📤 単語帳をJSONエクスポート</button>
