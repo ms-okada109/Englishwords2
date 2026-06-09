@@ -90,10 +90,10 @@ const PF_SCENES=[
 // ── STATE ─────────────────────────────────────────────────────
 let D={words:[],settings:{apiKey:''}};
 let TAB='today', MID=null;
-const GEN=new Set(),CORR=new Set(),SYN=new Set();
+const GEN=new Set(),CORR=new Set(),SYN=new Set(),QALOAD=new Set();
 let FS={idx:0,flipped:false,mode:'all',know:0,retry:0};
 let SQ='';
-const UT={},UN={},SP={},HMS={},SH={};
+const UT={},UN={},SP={},HMS={},SH={},QA={};
 let DTAB='s1', DT={}, DX={}, dtTimer=null, gistSyncing=false;
 
 // ── DATA ──────────────────────────────────────────────────────
@@ -179,6 +179,29 @@ async function apiCorr(word,meaning,sent){
 async function apiSyn(word,meaning){
   return pj(await callAPI('You are an English vocabulary teacher. Return ONLY valid JSON, no markdown.',
     `For "${word}"(${meaning||''}), list synonyms and antonyms with Japanese. JSON:\n{"synonyms":[{"word":"","jp":""}],"antonyms":[{"word":"","jp":""}]}`));
+}
+
+async function doQuestion(id){
+  const w=D.words.find(w=>String(w.id)===String(id));if(!w||QALOAD.has(id))return;
+  const q=(QA[String(id)]||'').trim();
+  if(!q){alert('質問を入力してください');return;}
+  if(!getKey()){openSettings();return;}
+  QALOAD.add(id);renderModal();
+  try{
+    const a=await callAPI(
+      'You are an English language teacher for Japanese learners. Answer questions about English words and usage clearly and helpfully in Japanese.',
+      `単語: "${w.word}" (${w.meaning||'意味未登録'})\n質問: ${q}\n\n日本語で答えてください。`,
+      600
+    );
+    const ww=D.words.find(w=>String(w.id)===String(id));
+    if(ww){
+      if(!ww.questions)ww.questions=[];
+      ww.questions=[{q,a,ts:Date.now()},...ww.questions].slice(0,30);
+      persist();
+    }
+    QA[String(id)]='';
+  }catch(e){console.error(e);}
+  QALOAD.delete(id);render();if(String(MID)===String(id))renderModal();
 }
 
 // ── VOCAB ACTIONS ─────────────────────────────────────────────
@@ -652,6 +675,24 @@ function renderModal(){
       <span id="notes-saved" style="font-size:12px;color:${C.green};opacity:0;transition:opacity .3s">✓ 保存しました</span>
     </div>
     <div class="divider"></div>
+    <div class="sl">💬 質問コーナー</div>
+    <textarea class="ta" oninput="QA['${id}']=this.value" rows="2"
+      placeholder="この単語について何でも聞いてください&#10;例:「どんな場面で使いますか？」「似た単語との違いは？」"
+      style="margin-bottom:8px">${esc(QA[id]||'')}</textarea>
+    <button onclick="doQuestion('${id}')" ${QALOAD.has(id)?'disabled':''}
+      style="width:100%;padding:11px;border-radius:10px;border:none;background:${QALOAD.has(id)?'#1a2a3a':C.blue};color:${QALOAD.has(id)?C.mu:'#fff'};font-weight:700;cursor:${QALOAD.has(id)?'not-allowed':'pointer'};font-size:13px">
+      ${QALOAD.has(id)?'<span class="spin"></span>回答中…':'💬 質問する'}
+    </button>
+    ${(w.questions||[]).length>0?`
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+        ${(w.questions||[]).map(qa=>`
+          <div style="background:#060d18;border-radius:10px;border:1px solid ${C.b};padding:12px 14px">
+            <div style="font-size:12px;color:${C.blue};font-weight:600;margin-bottom:6px">Q: ${esc(qa.q)}</div>
+            <div style="font-size:13px;color:#94a3b8;line-height:1.7">${esc(qa.a)}</div>
+            ${qa.ts?`<div style="font-size:10px;color:${C.mu};margin-top:6px">${new Date(qa.ts).toLocaleDateString('ja-JP')}</div>`:''}
+          </div>`).join('')}
+      </div>`:''}
+    <div class="divider"></div>
     <button onclick="delWord('${id}')" style="width:100%;padding:11px;border-radius:10px;border:1px solid #450a0a;background:transparent;color:${C.red};font-weight:700;cursor:pointer;font-size:13px">
       この単語を削除
     </button>
@@ -724,7 +765,7 @@ function saveGithubToken(){
 
 async function saveToGist(){
   if(gistSyncing)return;
-  const token=D.settings.githubToken;
+  const token=(D.settings.githubToken||'').trim();
   if(!token){alert('GitHubトークンを設定してください');openSettings();return;}
   gistSyncing=true;
   const el=document.getElementById('cloud-btns');
@@ -732,17 +773,17 @@ async function saveToGist(){
   try{
     const content=JSON.stringify({words:D.words,dictation:{lines:DT,extra:DX}},null,2);
     const body={description:'単語帳データ (vocab-app)',public:false,files:{'vocab_app_data.json':{content}}};
-    const gistId=D.settings.gistId;
+    const gistId=(D.settings.gistId||'').trim();
     const r=await fetch(gistId?`https://api.github.com/gists/${gistId}`:'https://api.github.com/gists',{
       method:gistId?'PATCH':'POST',
-      headers:{'Authorization':`token ${token}`,'Content-Type':'application/json'},
+      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json','Accept':'application/vnd.github+json'},
       body:JSON.stringify(body)
     });
-    if(!r.ok)throw new Error('HTTP '+r.status);
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(`HTTP ${r.status}: ${e.message||'unknown'}`);}
     const d=await r.json();
     if(!gistId){D.settings.gistId=d.id;persist();}
     alert('☁️ 保存しました（'+D.words.length+'語）');
-  }catch(e){alert('保存失敗: '+e.message);}
+  }catch(e){alert('保存失敗:\n'+e.message);}
   gistSyncing=false;
   const el2=document.getElementById('cloud-btns');
   if(el2)el2.innerHTML=cloudBtnsHTML();
@@ -750,8 +791,8 @@ async function saveToGist(){
 
 async function loadFromGist(){
   if(gistSyncing)return;
-  const token=D.settings.githubToken;
-  const gistId=D.settings.gistId;
+  const token=(D.settings.githubToken||'').trim();
+  const gistId=(D.settings.gistId||'').trim();
   if(!token){alert('GitHubトークンを設定してください');openSettings();return;}
   if(!gistId){alert('まだクラウドにデータがありません。先に☁️↑で保存してください');return;}
   if(!confirm('クラウドのデータで上書きしますか？\n現在のデータは失われます。'))return;
@@ -760,12 +801,12 @@ async function loadFromGist(){
   if(el)el.innerHTML=`<span style="font-size:11px;color:${C.mu};padding:0 6px">読込中…</span>`;
   try{
     const r=await fetch(`https://api.github.com/gists/${gistId}`,{
-      headers:{'Authorization':`token ${token}`}
+      headers:{'Authorization':`Bearer ${token}`,'Accept':'application/vnd.github+json'}
     });
-    if(!r.ok)throw new Error('HTTP '+r.status);
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(`HTTP ${r.status}: ${e.message||'unknown'}`);}
     const d=await r.json();
     const content=d.files['vocab_app_data.json']?.content;
-    if(!content)throw new Error('データが見つかりません');
+    if(!content)throw new Error('vocab_app_data.json が見つかりません');
     const parsed=JSON.parse(content);
     D.words=parsed.words||[];
     DT=parsed.dictation?.lines||{};
@@ -773,7 +814,7 @@ async function loadFromGist(){
     persist();saveDT();
     alert('☁️ 読み込み完了（'+D.words.length+'語）');
     render();
-  }catch(e){alert('読み込み失敗: '+e.message);}
+  }catch(e){alert('読み込み失敗:\n'+e.message);}
   gistSyncing=false;
   const el2=document.getElementById('cloud-btns');
   if(el2)el2.innerHTML=cloudBtnsHTML();
