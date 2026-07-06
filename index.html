@@ -749,6 +749,7 @@ function openImport(){
 function closeFloat(){document.getElementById('float-wrap').classList.remove('on');}
 
 // ── GIST SYNC ─────────────────────────────────────────────────
+let gistSyncing=false;
 function cloudBtnsHTML(){
   const ok=!!D.settings.githubToken;
   return`
@@ -767,6 +768,7 @@ async function saveToGist(){
   if(gistSyncing)return;
   const token=(D.settings.githubToken||'').trim();
   if(!token){alert('GitHubトークンを設定してください');openSettings();return;}
+  if(!confirm('現在の端末のデータをクラウドに保存しますか？\nクラウド上の既存データは上書きされます。'))return;
   gistSyncing=true;
   const el=document.getElementById('cloud-btns');
   if(el)el.innerHTML=`<span style="font-size:11px;color:${C.mu};padding:0 6px">保存中…</span>`;
