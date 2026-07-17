@@ -93,6 +93,7 @@ let TAB='today', MID=null;
 const GEN=new Set(),CORR=new Set(),SYN=new Set(),QALOAD=new Set();
 let FS={idx:0,flipped:false,mode:'all',know:0,retry:0};
 let SQ='';
+let WQ='', WFILT='pass';
 const UT={},UN={},SP={},HMS={},SH={},QA={};
 let DTAB='s1', DT={}, DX={}, dtTimer=null;
 
@@ -326,16 +327,16 @@ function render(){
           ${[['📤','エクスポート','exportData()'],['📥','インポート','openImport()'],['⚙️','設定','openSettings()']].map(([ic,tt,fn])=>`<button onclick="${fn}" title="${tt}" style="background:none;border:none;color:${C.mu};cursor:pointer;font-size:17px;padding:4px 5px">${ic}</button>`).join('')}
         </div>
       </div>
-      <div style="display:flex;padding:0 4px">
-        ${[['today','今日'],['book','単語帳'],['flash','🃏'],['tests','テスト'],['stats','統計'],['dictation','🎬']].map(([id,lbl])=>{
+      <div style="display:flex;padding:0 4px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch">
+        ${[['today','今日'],['book','単語帳'],['flash','🃏'],['tests','テスト'],['written','📝文'],['stats','統計'],['dictation','🎬']].map(([id,lbl])=>{
           const on=TAB===id;
           const badge=id==='tests'&&due>0?`<span style="position:absolute;top:4px;right:calc(50% - 18px);background:${C.red};color:#fff;font-size:9px;font-weight:700;border-radius:99px;padding:1px 4px">${due}</span>`:'';
-          return`<button onclick="setTab('${id}')" style="flex:1;padding:9px 0;background:none;border:none;cursor:pointer;font-size:11px;font-weight:${on?700:400};color:${on?'#f1f5f9':C.mu};border-bottom:3px solid ${on?C.gold:'transparent'};position:relative;transition:all .15s">${lbl}${badge}</button>`;
+          return`<button onclick="setTab('${id}')" style="flex:1;min-width:52px;padding:9px 0;background:none;border:none;cursor:pointer;font-size:11px;font-weight:${on?700:400};color:${on?'#f1f5f9':C.mu};border-bottom:3px solid ${on?C.gold:'transparent'};position:relative;transition:all .15s;white-space:nowrap">${lbl}${badge}</button>`;
         }).join('')}
       </div>
     </div>
     <div style="padding:16px 16px 48px">
-      ${TAB==='today'?bToday():TAB==='book'?bBook():TAB==='flash'?bFlash():TAB==='tests'?bTests():TAB==='stats'?bStats():bDictation()}
+      ${TAB==='today'?bToday():TAB==='book'?bBook():TAB==='flash'?bFlash():TAB==='tests'?bTests():TAB==='written'?bWritten():TAB==='stats'?bStats():bDictation()}
     </div>
   `;
 }
@@ -446,6 +447,46 @@ function bTests(){
         <span class="tag" style="background:#450a0a;color:${C.red}">${nx?.label}</span>
       </div>`;}).join('')}
   `;
+}
+
+// ── WRITTEN SENTENCES ─────────────────────────────────────────
+function collectWritten(){
+  return D.words.flatMap(w=>(w.userSentences||[]).map((s,i)=>({...s,word:w.word,meaning:w.meaning,wordId:w.id,isLatest:i===0})));
+}
+function bWritten(){
+  const all=collectWritten();
+  const passCount=all.filter(s=>s.passed).length;
+  return`
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      ${[['pass','✅ 合格のみ'],['all','すべて']].map(([id,lbl])=>`
+        <button onclick="WFILT='${id}';document.getElementById('wlist').innerHTML=bWrittenList()" style="flex:1;padding:9px 0;border-radius:10px;border:none;cursor:pointer;background:${WFILT===id?C.blue:C.card};color:${WFILT===id?'#fff':C.mu};font-size:13px;font-weight:${WFILT===id?700:400}">${lbl}</button>`).join('')}
+    </div>
+    <input id="wsrch" class="inp" value="${esc(WQ)}" placeholder="🔍 単語で絞り込み…" style="margin-bottom:12px"
+      oninput="WQ=this.value;document.getElementById('wlist').innerHTML=bWrittenList()">
+    <div style="font-size:11px;color:${C.mu};margin-bottom:10px">合格した文: ${passCount}件 ／ 全記録: ${all.length}件</div>
+    <div id="wlist">${bWrittenList()}</div>
+  `;
+}
+function bWrittenList(){
+  let list=collectWritten();
+  if(WFILT==='pass')list=list.filter(s=>s.passed);
+  if(WQ.trim())list=list.filter(s=>s.word.toLowerCase().includes(WQ.toLowerCase()));
+  list.sort((a,b)=>(b.ts||0)-(a.ts||0));
+  if(!list.length)return`<div style="text-align:center;color:${C.mu};padding:40px 0;font-size:14px;line-height:2">${WFILT==='pass'?'まだ合格した文がありません。\nテストタブから添削に挑戦してみましょう。':'記録がありません'}</div>`;
+  return list.map(s=>`
+    <div onclick="openModal('${s.wordId}')" style="background:${C.c2};border:1px solid ${C.b};border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:14px;font-weight:800;color:${C.gold}">${esc(s.word)}</span>
+          ${s.meaning?`<span style="font-size:11px;color:${C.mu}">${esc(s.meaning)}</span>`:''}
+        </div>
+        <span class="tag" style="background:${s.passed?'#064e3b':'#450a0a'};color:${s.passed?C.green:C.red}">${s.passed?'✅ 合格':'❌ 要復習'}</span>
+      </div>
+      <div style="font-size:14px;color:#e2e8f0;font-style:italic;line-height:1.6">"${esc(s.text)}"</div>
+      ${s.corrected&&s.corrected!==s.text?`<div style="font-size:13px;color:${C.green};margin-top:4px">→ "${esc(s.corrected)}"</div>`:''}
+      ${s.feedback?`<div style="font-size:12px;color:#94a3b8;margin-top:6px;line-height:1.6">${esc(s.feedback)}</div>`:''}
+      <div style="font-size:10px;color:${C.mu};margin-top:8px">${s.ts?new Date(s.ts).toLocaleDateString('ja-JP'):''}${s.isLatest?' ・ 最新':''}</div>
+    </div>`).join('');
 }
 
 // ── STATS ─────────────────────────────────────────────────────
